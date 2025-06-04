@@ -1,0 +1,10 @@
+#!/usr/bin/env xdg-open
+
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=IoT導入支援キット Ver.4.1
+Exec=/usr/bin/chromium --gtk-version=4 --profile-directory=Default --ignore-profile-directory-if-not-exists "http://localhost:1880/ui/"
+Icon=/home/iotkit/.node-red/fukuoka-icon256x256_white.png
+URL=http://localhost:1880/ui/
+Comment=Open http://localhost:1880/ui/ in a new tab in Chromium.

@@ -1,0 +1,9 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Node-RED : IoT導入支援キットVer.4.1
+Exec=/usr/bin/chromium --profile-directory=Default --ignore-profile-directory-if-not-exists "http://localhost:1880/#flow/baa69f6c03978bf4"
+Icon=/home/iotkit/.config/chromium/Default/Web Shortcut Icons/shortcut-bed564589066dcb26fc6feab9a666345.png
+URL=http://localhost:1880/#flow/baa69f6c03978bf4
+Comment=Chromium の新しいタブで http://localhost:1880/#flow/baa69f6c03978bf4 を開きます。
