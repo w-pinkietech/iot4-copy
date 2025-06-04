@@ -1,0 +1,23 @@
+{
+    "moment": {
+        "spec": "moment",
+        "module": "moment",
+        "subpath": "",
+        "builtin": false,
+        "known": false
+    },
+    "xlsx-js-style": {
+        "spec": "xlsx-js-style",
+        "module": "xlsx-js-style",
+        "subpath": "",
+        "builtin": false,
+        "known": false
+    },
+    "moment-timezone": {
+        "spec": "moment-timezone",
+        "module": "moment-timezone",
+        "subpath": "",
+        "builtin": false,
+        "known": false
+    }
+}

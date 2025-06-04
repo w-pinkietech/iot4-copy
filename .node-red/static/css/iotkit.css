@@ -1,0 +1,322 @@
+.h-1 {
+    height: 1px !important;
+}
+
+.w-1 {
+    width: 1px !important;
+}
+
+.w-10 {
+    width: 10%;
+}
+
+.w-15 {
+    width: 15%;
+}
+
+.w-20 {
+    width: 20%;
+}
+
+.w-30 {
+    width: 30%;
+}
+
+.w-35 {
+    width: 35%;
+}
+
+.w-40 {
+    width: 40%;
+}
+
+.w-60 {
+    width: 60%;
+}
+
+.w-70 {
+    width: 80%;
+}
+
+.w-80 {
+    width: 80%;
+}
+
+.w-max-0 {
+    max-width: 0;
+}
+
+.thema-icon {
+    color: var(--nr-dashboard-widgetColor);
+    background-color: transparent;
+}
+
+.realtime-chart {
+    width: 426px;
+    height: 264px;
+}
+
+.log-chart {
+    width: 1074px;
+    height: 500px;
+}
+
+.count-chart {
+    width: 1074px;
+    height: 580px;
+}
+
+.spectrogram-chart {
+    width: 1074px;
+    height: 580px;
+}
+
+.group-header {
+    max-height: 32px;
+    min-height: 32px;
+    margin-left: 12px;
+    margin-top: 6px;
+    margin-bottom: 12px;
+    font-weight: 500;
+    font-size: larger;
+}
+
+.top-right {
+    padding-top: 10px !important;
+    padding-right: 10px !important;
+    right: 0 !important;
+    position: absolute !important;
+}
+
+.bottom-left {
+    float: left !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+.bottom-left button {
+    width: 80px !important;
+}
+
+.btn-danger {
+    background-color: var(--bs-danger) !important;
+}
+
+.bottom-right {
+    float: right !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+.bottom-right button {
+    width: 80px !important;
+}
+
+.table-row>div {
+    display: flex;
+    align-items: center;
+}
+
+.table-row-6-6>div {
+    flex: 0 0 auto;
+    width: 50%;
+}
+
+.table-row-4-8>div:nth-child(odd) {
+    flex: 0 0 auto;
+    width: 33.333333333%;
+}
+
+.table-row-4-8>div:nth-child(even) {
+    flex: 0 0 auto;
+    width: 66.666666666%;
+}
+
+.table-row-5-7>div:nth-child(odd) {
+    flex: 0 0 auto;
+    width: 41.666666666%;
+}
+
+.table-row-5-7>div:nth-child(even) {
+    flex: 0 0 auto;
+    width: 58.3333333333%;
+}
+
+.table-row-10-2>div:nth-child(odd) {
+    flex: 0 0 auto;
+    width: 83.3333333333%;
+}
+
+.table-row-10-2>div:nth-child(even) {
+    flex: 0 0 auto;
+    width: 16.6666666667%;
+}
+
+.table-row-11-1>div:nth-child(odd) {
+    flex: 0 0 auto;
+    width: 91.6666666667%;
+}
+
+.table-row-11-1>div:nth-child(even) {
+    flex: 0 0 auto;
+    width: 8.33333333333%;
+}
+
+.table-row>div:not(:nth-last-child(-n+2)) {
+    border-bottom: 1px lightgray solid;
+}
+
+.table-row>div:nth-child(odd) {
+    margin-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    font-weight: 700 !important;
+}
+
+.table-row>div:nth-child(even) {
+    margin-top: 1rem !important;
+    padding-bottom: 1rem !important;
+}
+
+.btn-template {
+    padding-top: .5rem !important;
+    padding-bottom: .5rem !important;
+}
+
+.btn-height {
+    height: 48px;
+}
+
+.input-form md-input-container {
+    display: block;
+    margin-top: 0px;
+    margin-bottom: 0px;
+}
+
+.input-form>div:not(:last-child) {
+    height: 58px !important;
+}
+
+md-input-container>span,
+md-input-container>label,
+md-select .md-select-value.md-select-placeholder {
+    color: rgba(0, 0, 0, 0.54);
+}
+
+.nr-dashboard-template {
+    padding: 0 !important;
+}
+
+.nr-dashboard-textinput md-input-container label:not(.md-no-float):not(.md-container-ignore) {
+    margin-bottom: 3px !important;
+}
+
+.masonry-container {
+    max-width: 1800px;
+}
+
+.log-chart-button {
+    margin-top: -32px !important;
+    width: 100px;
+}
+
+.count-chart-button {
+    margin-top: -10px !important;
+    width: 150px;
+}
+
+.spectrogram-chart-button {
+    margin-top: -10px !important;
+    width: 100px;
+}
+
+.group-header>p {
+    color: var(--nr-dashboard-groupTextColor) !important;
+}
+
+.slider .md-track-fill {
+    background-color: var(--nr-dashboard-widgetColor) !important;
+}
+
+.slider .md-thumb::after {
+    background-color: var(--nr-dashboard-widgetColor) !important;
+    border-color: var(--nr-dashboard-widgetColor) !important;
+}
+
+md-select .md-select-value {
+    border-bottom-color: var(--nr-dashboard-widgetColor) !important;
+}
+
+md-select[disabled] .md-select-value {
+    padding-top: 0px;
+}
+
+.nav-link:hover {
+    color: var(--nr-dashboard-widgetColor);
+}
+
+.nav-pills .nav-link.active {
+    background-color: var(--nr-dashboard-widgetColor);
+    border-radius: 2px;
+    color: var(--nr-dashboard-widgetBgndColor) !important;
+}
+
+.nav-pills .nav-link {
+    border-radius: 2px;
+}
+
+.md-datepicker-button,
+.md-datepicker-triangle-button {
+    background-color: transparent !important;
+}
+
+.md-datepicker-button {
+    margin-top: -15px !important;
+}
+
+.md-datepicker-calendar-pane.md-pane-open {
+    background-color: transparent !important;
+    width: auto;
+}
+
+md-select .md-select-icon {
+    color: initial;
+}
+
+.md-icon-button+.md-datepicker-input-container {
+    width: calc(100% - 40px);
+}
+
+.white-icon path {
+    fill: white !important;
+}
+
+.nav-link {
+    color: gray;
+}
+
+.nr-dashboard-theme .nr-dashboard-template .md-button[disabled] {
+    opacity: 0.4 !important;
+    pointer-events: none !important;
+    color: white;
+}
+
+md-input-container {
+    margin-top: 10px;
+}
+
+.pairing-list>div {
+    height: 40px;
+    padding-right: calc(var(--bs-gutter-x) * .5);
+}
+
+.pairing-list>div:not(:first-child) {
+    margin-top: .25rem !important;
+}
+
+.pairing-list>div:not(:last-child) {
+    border-bottom: 1px solid lightgray;
+}
+
+.pairing-list>div>span {
+    line-height: 30px;
+}

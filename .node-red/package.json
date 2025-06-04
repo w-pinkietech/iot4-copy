@@ -1,0 +1,23 @@
+{
+  "name": "node-red-project",
+  "description": "initially created for you by Node-RED 4.0.9",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "moment": "^2.30.1",
+    "moment-timezone": "^0.5.48",
+    "node-red-contrib-aedes": "~0.13.0",
+    "node-red-contrib-buffer-parser": "^3.2.2",
+    "node-red-contrib-influxdb": "~0.7.0",
+    "node-red-contrib-play-audio": "^2.5.0",
+    "node-red-dashboard": "~3.6.5",
+    "node-red-node-email-variable": "~1.1.7",
+    "node-red-node-mysql": "~2.0.0",
+    "node-red-node-pi-gpio": "^2.0.6",
+    "node-red-node-ping": "^0.3.3",
+    "node-red-node-random": "^0.4.1",
+    "node-red-node-serialport": "^2.0.3",
+    "node-red-node-smooth": "^0.1.2",
+    "xlsx-js-style": "^1.2.0"
+  }
+}
