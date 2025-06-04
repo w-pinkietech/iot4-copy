@@ -1,0 +1,42 @@
+name: iotkit
+services:
+
+  mariadb:
+    build:
+      context: .
+      dockerfile: ./mariadb/Dockerfile
+    container_name: iotkit-mariadb
+    ports:
+      - 3306:3306
+    restart: always
+    environment:
+      - MARIADB_DATABASE=iotkit
+      - MARIADB_ROOT_PASSWORD=iotkit-password
+      - MARIADB_USER=iotkit
+      - MARIADB_PASSWORD=iotkit-password
+    volumes:
+      - mariadb:/var/lib/mysql
+
+  influxdb:
+    build:
+      context: .
+      dockerfile: ./influxdb/Dockerfile
+    container_name: iotkit-influxdb
+    ports:
+      - 8086:8086
+    restart: always
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=iotkit
+      - DOCKER_INFLUXDB_INIT_PASSWORD=iotkit-password
+      - DOCKER_INFLUXDB_INIT_ORG=fitc
+      - DOCKER_INFLUXDB_INIT_BUCKET=iotkit
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=influxdb-iotkit-secret-token
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+
+volumes:
+  mariadb:
+  influxdb-data:
+  influxdb-config:
