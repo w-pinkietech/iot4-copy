@@ -238,9 +238,9 @@ graph TB
         end
         
         subgraph "Host Resources"
-            I2CBus[/dev/i2c-1]
-            GPIOPins[/sys/class/gpio]
-            SerialPort[/dev/ttyUSB0]
+            I2CBus[I2C Bus<br/>/dev/i2c-1]
+            GPIOPins[GPIO Pins<br/>/sys/class/gpio]
+            SerialPort[Serial Port<br/>/dev/ttyUSB0]
         end
     end
     
