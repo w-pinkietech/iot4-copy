@@ -330,6 +330,8 @@ with tab4:
 - 自己完結型メッセージの受信と処理
 - 時系列データの永続化
 - 統合ダッシュボードとAPI提供
+- **双方向MQTT通信によるゲートウェイ制御**
+- **製造業システムとの統合ゲートウェイ機能**
 
 **技術スタック**
 - MQTT Broker (mosquitto)
@@ -338,13 +340,14 @@ with tab4:
 - Streamlit (統合管理UI)
 - Grafana (可視化)
 
-**Data Collector Service**
+**Enhanced Data Collector Service**
 ```python
 # collector/data_collector.py
 class DataCollectorService:
     def __init__(self):
         self.influxdb = InfluxDBClient()
         self.mqtt_client = MQTTClient()
+        self.manufacturing_gateway = ManufacturingGateway()
     
     async def on_sensor_message(self, message):
         data = json.loads(message)
@@ -354,9 +357,11 @@ class DataCollectorService:
         sensor_value = data["sensor"]["value"]
         thresholds = data["thresholds"]
         
-        # しきい値判定
+        # しきい値判定とアラート処理
         if sensor_value > thresholds["high"]:
             await self.trigger_alert(data)
+            # 他ゲートウェイへのアラート配信
+            await self.broadcast_alert(data)
         
         # InfluxDBに保存（設定情報もタグとして保存）
         await self.influxdb.write({
@@ -371,13 +376,176 @@ class DataCollectorService:
             },
             "timestamp": data["timestamp"]
         })
+        
+        # 製造業システムへのデータ転送
+        await self.manufacturing_gateway.process_for_manufacturing(data)
+    
+    async def publish_gateway_config(self, gateway_id: str, config: dict):
+        """ゲートウェイへの設定配信"""
+        topic = f"gateway/{gateway_id}/config/update"
+        await self.mqtt_client.publish(topic, config)
+    
+    async def send_gateway_command(self, gateway_id: str, command: dict):
+        """ゲートウェイへのコマンド送信"""
+        topic = f"gateway/{gateway_id}/command/{command['type']}"
+        await self.mqtt_client.publish(topic, command)
+    
+    async def broadcast_alert(self, alert_data: dict):
+        """アラートの全ゲートウェイ配信"""
+        topic = "alert/broadcast"
+        alert_message = {
+            "source_gateway": alert_data["gateway_id"],
+            "alert_type": "threshold_exceeded",
+            "sensor_info": alert_data["sensor"],
+            "timestamp": alert_data["timestamp"],
+            "suggested_actions": self.get_suggested_actions(alert_data)
+        }
+        await self.mqtt_client.publish(topic, alert_message)
+```
+
+**Manufacturing Gateway Integration**
+```python
+# collector/manufacturing_gateway.py
+class ManufacturingGateway:
+    def __init__(self):
+        self.mes_client = MESClient()
+        self.erp_client = ERPClient()
+        self.scada_client = SCADAClient()
+        self.mqtt_client = MQTTClient()
+    
+    async def process_for_manufacturing(self, sensor_data):
+        """製造業システム向けデータ処理"""
+        
+        # トヨタ生産方式：かんばん方式への連携
+        if sensor_data["sensor"]["type"] == "production_count":
+            await self.update_kanban_system(sensor_data)
+        
+        # アンドン（異常通知）システム連携
+        if self.is_quality_issue(sensor_data):
+            await self.trigger_andon_alert(sensor_data)
+        
+        # ジャストインタイム制御
+        if sensor_data["sensor"]["type"] == "inventory_level":
+            await self.jit_control(sensor_data)
+        
+        # 予知保全への活用
+        if self.is_maintenance_required(sensor_data):
+            await self.schedule_maintenance(sensor_data)
+    
+    async def trigger_andon_alert(self, data):
+        """アンドンシステムへのアラート送信"""
+        alert_message = {
+            "line_id": data["metadata"]["location"],
+            "alert_type": "quality_issue",
+            "severity": self.calculate_severity(data),
+            "sensor_data": data["sensor"],
+            "timestamp": data["timestamp"],
+            "suggested_action": "stop_line_inspection"
+        }
+        
+        # MES/ERPシステムへの通知
+        await self.mes_client.send_alert(alert_message)
+        
+        # 現場表示システムへの通知
+        await self.mqtt_client.publish("manufacturing/andon", alert_message)
+    
+    async def update_kanban_system(self, data):
+        """かんばんシステムの更新"""
+        production_data = {
+            "line_id": data["metadata"]["location"],
+            "product_count": data["sensor"]["value"],
+            "timestamp": data["timestamp"],
+            "quality_status": self.assess_quality(data)
+        }
+        
+        # ERPシステムへの生産実績送信
+        await self.erp_client.update_production(production_data)
+        
+        # 次工程への指示（必要に応じて）
+        if self.should_trigger_next_process(data):
+            await self.trigger_downstream_process(data)
+    
+    async def to_opc_ua_format(self, sensor_data):
+        """OPC UAフォーマットへの変換"""
+        return {
+            "NodeId": f"ns=1;s={sensor_data['sensor']['id']}",
+            "Value": sensor_data["sensor"]["value"],
+            "SourceTimestamp": sensor_data["timestamp"],
+            "StatusCode": "Good"
+        }
+    
+    async def to_mqtt_sparkplug(self, sensor_data):
+        """MQTT Sparkplug B仕様への変換"""
+        return {
+            "timestamp": int(datetime.fromisoformat(sensor_data["timestamp"]).timestamp() * 1000),
+            "metrics": [{
+                "name": sensor_data["sensor"]["id"],
+                "value": sensor_data["sensor"]["value"],
+                "type": "Double",
+                "timestamp": int(datetime.fromisoformat(sensor_data["timestamp"]).timestamp() * 1000)
+            }]
+        }
+```
+
+**Gateway Command Handler (Edge側での受信処理)**
+```python
+# edge-gateway/command_handler.py  
+class CommandHandler:
+    async def on_config_update(self, message):
+        """設定更新コマンドの処理"""
+        config = json.loads(message)
+        await self.db.update_sensor_config(config["sensor_id"], config)
+        
+        # 設定更新完了を報告
+        response = {
+            "gateway_id": self.gateway_id,
+            "command_id": config["command_id"],
+            "status": "completed",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        await self.mqtt_client.publish("gateway/response", response)
+    
+    async def on_system_command(self, message):
+        """システムコマンドの処理"""
+        command = json.loads(message)
+        
+        if command["action"] == "restart_service":
+            await self.restart_service(command["service_name"])
+        elif command["action"] == "calibrate_sensor":
+            await self.calibrate_sensor(command["sensor_id"])
+        elif command["action"] == "emergency_stop":
+            await self.emergency_stop()
+```
+
+**MQTT Topic Structure**
+```
+# 既存：データ収集
+sensors/data
+
+# 新規：ゲートウェイ制御
+gateway/{gateway_id}/config/{config_type}      # 設定配信
+gateway/{gateway_id}/command/{command_type}    # コマンド送信
+gateway/response                               # 実行結果報告
+
+# 新規：アラート配信
+alert/broadcast                                # 全体アラート
+alert/{gateway_id}/local                       # 特定ゲートウェイ
+
+# 新規：製造業システム連携
+manufacturing/andon                            # アンドンシステム
+manufacturing/kanban                           # かんばんシステム
+manufacturing/production                       # 生産実績
+manufacturing/quality                          # 品質データ
+manufacturing/maintenance                      # 保全情報
 ```
 
 **特徴**
+- **双方向通信**: CollectorからGatewayへの制御配信
+- **製造業統合**: トヨタ生産方式等の概念を実装
+- **標準プロトコル対応**: OPC UA、MQTT Sparkplug B対応
+- **リアルタイム制御**: アンドン、かんばん、JIT制御
 - **設定非依存**: MQTTメッセージが自己完結
-- **シンプル**: 設定同期やAPI呼び出し不要
-- **堅牢**: ネットワーク障害に強い
-- **スケーラブル**: 複数ゲートウェイからの統合処理
+- **スケーラブル**: 複数ゲートウェイと複数製造システムの統合
 
 ## エッジゲートウェイ対応ディレクトリ構造
 
@@ -386,6 +554,7 @@ iot-gateway-system/
 ├── edge-gateway/            # エッジゲートウェイ層（各ゲートウェイで実行）
 │   ├── gateway_service.py   # ゲートウェイサービス
 │   ├── config_ui.py         # ローカルStreamlit設定UI
+│   ├── command_handler.py   # 双方向MQTT通信ハンドラー
 │   ├── sensors/             # センサードライバー
 │   │   ├── __init__.py
 │   │   ├── base.py         # 基底クラス
@@ -425,6 +594,7 @@ iot-gateway-system/
 ├── collection-server/       # 統合処理層（任意のLinux環境）
 │   ├── main.py             # FastAPIアプリケーション
 │   ├── data_collector.py   # MQTTデータ受信・処理
+│   ├── manufacturing_gateway.py # 製造業システム統合
 │   ├── storage.py          # InfluxDB書き込み
 │   ├── alert_manager.py    # アラート処理
 │   ├── api/                # REST API
