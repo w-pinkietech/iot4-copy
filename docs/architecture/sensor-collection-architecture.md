@@ -29,19 +29,19 @@ graph TB
     subgraph "Edge Gateway Layer"
         subgraph "RPi4 Gateway A"
             RPi4HAL[Edge Gateway Service<br/>- 複数センサー統合管理<br/>- ローカル設定管理<br/>- 自己完結型データ送信]
-            RPi4DB[(MariaDB<br/>ローカル設定)]
+            RPi4DB[(SQLite<br/>ローカル設定)]
             RPi4Sensors[BravePI + I2C/GPIO<br/>センサー群]
         end
         
         subgraph "RPi5 Gateway B"
             RPi5HAL[Edge Gateway Service<br/>- libgpiod対応<br/>- 複数センサー統合管理<br/>- ローカル設定管理]
-            RPi5DB[(MariaDB<br/>ローカル設定)]
+            RPi5DB[(SQLite<br/>ローカル設定)]
             RPi5Sensors[センサー群]
         end
         
         subgraph "Other Gateway C"
             OtherHAL[Edge Gateway Service<br/>- デバイス固有実装<br/>- センサー統合管理]
-            OtherDB[(MariaDB<br/>ローカル設定)]
+            OtherDB[(SQLite<br/>ローカル設定)]
             OtherSensors[センサー群]
         end
     end
@@ -107,7 +107,7 @@ graph TB
 class EdgeGatewayService:
     def __init__(self, gateway_id: str):
         self.gateway_id = gateway_id
-        self.db = LocalMariaDB()  # ローカル設定DB
+        self.db = LocalSQLiteDB()  # ローカル設定DB
         self.sensors = load_sensor_drivers()
         self.mqtt_client = MQTTClient()
     
@@ -147,7 +147,7 @@ class EdgeGatewayService:
 ```python
 # edge/config_ui.py
 import streamlit as st
-from database import LocalMariaDB
+from database import LocalSQLiteDB
 
 st.set_page_config(page_title="Gateway Config", page_icon="🌡️")
 
@@ -583,10 +583,10 @@ iot-gateway-system/
 │   │   └── mock/
 │   │       ├── gpio.py     # テスト用モック
 │   │       └── i2c.py      # テスト用モック
-│   ├── database/            # ローカルMariaDB管理
-│   │   ├── models.py       # SQLAlchemyモデル
-│   │   ├── migrations/     # DBマイグレーション
-│   │   └── init.sql        # 初期化スクリプト
+│   ├── database/            # ローカルSQLite管理
+│   │   ├── models.py       # SQLiteモデル
+│   │   ├── schema.sql      # テーブル定義
+│   │   └── init.py         # DB初期化
 │   ├── config/
 │   │   └── gateway_config.yml # ゲートウェイ設定
 │   └── requirements-gateway.txt # ゲートウェイ用依存関係
@@ -644,9 +644,9 @@ iot-gateway-system/
 │   │       ├── Dockerfile
 │   │       └── config/
 │   ├── gateway-setup/       # ゲートウェイセットアップ
-│   │   ├── mariadb/
-│   │   │   ├── install.sh
-│   │   │   └── init.sql
+│   │   ├── sqlite/
+│   │   │   ├── schema.sql
+│   │   │   └── setup.py
 │   │   └── systemd/
 │   │       └── gateway-service.service
 │   ├── systemd/             # Collection層systemdサービス
@@ -701,7 +701,7 @@ graph TB
             ConfigUI1[Streamlit Config UI<br/>:8501]
         end
         subgraph "Local Storage"
-            LocalDB1[(MariaDB<br/>ローカル設定)]
+            LocalDB1[(SQLite<br/>ローカル設定)]
         end
         Gateway1Sensors[BravePI + センサー群]
     end
@@ -712,7 +712,7 @@ graph TB
             ConfigUI2[Streamlit Config UI<br/>:8501]
         end
         subgraph "Local Storage"
-            LocalDB2[(MariaDB<br/>ローカル設定)]
+            LocalDB2[(SQLite<br/>ローカル設定)]
         end
         Gateway2Sensors[センサー群]
     end
@@ -775,7 +775,7 @@ graph TB
 |---------|---------|--------|------|----------|
 | Gateway Service | Native | - | センサーデータ収集 | systemdサービス |
 | Streamlit Config UI | Native | 8501 | ローカル設定管理 | http://gateway-ip:8501 |
-| MariaDB | Native/Docker | 3306 | ローカル設定保存 | 内部アクセスのみ |
+| SQLite Database | File | - | ローカル設定保存 | ファイルアクセス |
 
 #### Collection/Application Layer
 | サービス | 実行環境 | ポート | 用途 | アクセス方法 |
@@ -811,16 +811,15 @@ http://192.168.1.200:8000/docs
 
 ### 各層の技術選択理由
 
-**Edge Layer（エッジデバイス層）**
+**Edge Gateway Layer（エッジゲートウェイ層）**
 - **ネイティブ実行**: ハードウェア直接アクセス必須
-- **軽量実装**: リソース制約のあるSBC環境
+- **軽量DB**: SQLiteによる最小リソース使用
+- **自律動作**: ネットワーク切断時も設定管理継続
 
-**Collection Layer（データ収集層）**
+**Collection/Application Layer（統合処理層）**
 - **ハイブリッド構成**: 
   - アプリケーション: ネイティブ（性能重視）
   - データベース: Docker（運用性重視）
-
-**Application Layer（アプリケーション層）**
 - **完全抽象化**: ハードウェア非依存
 - **クラウド対応**: スケーラビリティ確保
 
@@ -831,7 +830,7 @@ http://192.168.1.200:8000/docs
 ```mermaid
 flowchart LR
     Sensors[複数センサー] --> Gateway[Edge Gateway]
-    Gateway --> LocalDB[(ローカルMariaDB)]
+    Gateway --> LocalDB[(ローカルSQLite)]
     Gateway --> Message[自己完結型<br/>MQTTメッセージ]
     
     Message --> MQTT[MQTT Broker]
