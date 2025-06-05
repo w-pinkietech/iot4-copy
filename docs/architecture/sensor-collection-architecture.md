@@ -20,39 +20,73 @@
 
 ## システム構成図
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Raspberry Pi 4                           │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │   I2C Bus   │  │  GPIO Pins  │  │   Serial    │        │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
-│         │                 │                 │                │
-│  ┌──────┴──────────┬──────┴─────────┬──────┴──────┐        │
-│  │ センサードライバー │ センサードライバー │ センサードライバー │        │
-│  │ (vl53l1x.py)   │ (gpio.py)     │ (brave.py)   │        │
-│  └──────┬──────────┴──────┬─────────┴──────┬──────┘        │
-│         │                 │                 │                │
-│  ┌──────┴─────────────────┴─────────────────┴──────┐        │
-│  │           Sensor Collector Service              │        │
-│  │               (FastAPI + asyncio)               │        │
-│  │  - センサー設定読み込み (MariaDB)                  │        │
-│  │  - ポーリングスケジュール管理                      │        │
-│  │  - しきい値判定・イベント処理                     │        │
-│  │  - データバッファリング                          │        │
-│  └────────────┬────────────────────┬───────────────┘        │
-│               │                    │                         │
-│       ┌───────┴────────┐  ┌───────┴────────┐              │
-│       │   InfluxDB     │  │   イベント通知   │              │
-│       │  (時系列保存)   │  │  (MQTT/Email)  │              │
-│       └────────────────┘  └────────────────┘              │
-└─────────────────────────────────────────────────────────────┘
-
-        ↑ 設定管理              ↑ リアルタイム表示
-┌─────────────────┐    ┌─────────────────┐
-│    Streamlit    │    │     Grafana     │
-│   (設定画面)     │    │  (ダッシュボード) │
-└─────────────────┘    └─────────────────┘
+```mermaid
+graph TB
+    subgraph "Raspberry Pi 4"
+        subgraph "Hardware Layer"
+            I2C[I2C Bus]
+            GPIO[GPIO Pins]
+            Serial[Serial Port]
+        end
+        
+        subgraph "Driver Layer"
+            I2CDriver[センサードライバー<br/>vl53l1x.py<br/>opt3001.py<br/>mcp3427.py]
+            GPIODriver[センサードライバー<br/>gpio.py]
+            SerialDriver[センサードライバー<br/>brave.py]
+        end
+        
+        subgraph "Application Layer"
+            Collector[Sensor Collector Service<br/>FastAPI + asyncio<br/>- センサー設定読み込み<br/>- ポーリングスケジュール管理<br/>- しきい値判定・イベント処理<br/>- データバッファリング]
+        end
+        
+        subgraph "Storage Layer"
+            InfluxDB[(InfluxDB<br/>時系列保存)]
+            MariaDB[(MariaDB<br/>設定保存)]
+        end
+        
+        subgraph "Notification"
+            MQTT[MQTT Broker]
+            Email[Email Server]
+        end
+    end
+    
+    subgraph "External Services"
+        Streamlit[Streamlit<br/>設定画面]
+        Grafana[Grafana<br/>ダッシュボード]
+    end
+    
+    %% Hardware to Driver connections
+    I2C --> I2CDriver
+    GPIO --> GPIODriver
+    Serial --> SerialDriver
+    
+    %% Driver to Collector connections
+    I2CDriver --> Collector
+    GPIODriver --> Collector
+    SerialDriver --> Collector
+    
+    %% Collector to Storage/Notification
+    Collector --> InfluxDB
+    Collector --> MQTT
+    Collector --> Email
+    Collector -.->|設定読込| MariaDB
+    
+    %% External Service connections
+    Streamlit -->|設定管理| MariaDB
+    Grafana -->|データ表示| InfluxDB
+    
+    %% Styling
+    classDef hardware fill:#FFE5B4,stroke:#333,stroke-width:2px
+    classDef driver fill:#B4E5FF,stroke:#333,stroke-width:2px
+    classDef service fill:#B4FFB4,stroke:#333,stroke-width:2px
+    classDef storage fill:#FFB4B4,stroke:#333,stroke-width:2px
+    classDef external fill:#E5B4FF,stroke:#333,stroke-width:2px
+    
+    class I2C,GPIO,Serial hardware
+    class I2CDriver,GPIODriver,SerialDriver driver
+    class Collector,MQTT,Email service
+    class InfluxDB,MariaDB storage
+    class Streamlit,Grafana external
 ```
 
 ## コンポーネント詳細
@@ -181,20 +215,38 @@ iot-system/
 
 ### 1. センサーデータ収集フロー
 
-```
-センサー → ドライバー → Collector → InfluxDB → Grafana
-                         ↓
-                    しきい値判定
-                         ↓
-                    イベント発火 → MQTT/Email
+```mermaid
+flowchart LR
+    Sensor[センサー] --> Driver[ドライバー]
+    Driver --> Collector[Collector]
+    Collector --> InfluxDB[(InfluxDB)]
+    InfluxDB --> Grafana[Grafana]
+    
+    Collector --> Threshold{しきい値判定}
+    Threshold -->|超過| Event[イベント発火]
+    Event --> MQTT[MQTT]
+    Event --> Email[Email]
+    
+    style Sensor fill:#FFE5B4
+    style Driver fill:#B4E5FF
+    style Collector fill:#B4FFB4
+    style InfluxDB fill:#FFB4B4
+    style Grafana fill:#E5B4FF
 ```
 
 ### 2. 設定管理フロー
 
-```
-Streamlit UI → FastAPI → MariaDB → Collector Service
-                                        ↓
-                                  設定リロード
+```mermaid
+flowchart LR
+    UI[Streamlit UI] --> API[FastAPI]
+    API --> DB[(MariaDB)]
+    DB --> Service[Collector Service]
+    Service --> Reload[設定リロード]
+    
+    style UI fill:#E5B4FF
+    style API fill:#B4FFB4
+    style DB fill:#FFB4B4
+    style Service fill:#B4FFB4
 ```
 
 ## 移行戦略
