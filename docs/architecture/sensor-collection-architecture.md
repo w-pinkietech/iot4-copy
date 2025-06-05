@@ -22,60 +22,62 @@
 
 ## システム構成図
 
-### 分散アーキテクチャ概要
+### エッジゲートウェイアーキテクチャ概要
 
 ```mermaid
 graph TB
-    subgraph "Edge Devices Layer"
-        subgraph "Raspberry Pi 4"
-            RPi4HAL[Hardware Access Service<br/>- GPIO制御<br/>- I2C通信<br/>- センサー読み取り]
-            RPi4Sensors[センサー群]
+    subgraph "Edge Gateway Layer"
+        subgraph "RPi4 Gateway A"
+            RPi4HAL[Edge Gateway Service<br/>- 複数センサー統合管理<br/>- ローカル設定管理<br/>- 自己完結型データ送信]
+            RPi4DB[(MariaDB<br/>ローカル設定)]
+            RPi4Sensors[BravePI + I2C/GPIO<br/>センサー群]
         end
         
-        subgraph "Raspberry Pi 5"
-            RPi5HAL[Hardware Access Service<br/>- libgpiod対応<br/>- I2C通信<br/>- センサー読み取り]
+        subgraph "RPi5 Gateway B"
+            RPi5HAL[Edge Gateway Service<br/>- libgpiod対応<br/>- 複数センサー統合管理<br/>- ローカル設定管理]
+            RPi5DB[(MariaDB<br/>ローカル設定)]
             RPi5Sensors[センサー群]
         end
         
-        subgraph "Other SBC"
-            OtherHAL[Hardware Access Service<br/>- デバイス固有実装<br/>- センサー読み取り]
+        subgraph "Other Gateway C"
+            OtherHAL[Edge Gateway Service<br/>- デバイス固有実装<br/>- センサー統合管理]
+            OtherDB[(MariaDB<br/>ローカル設定)]
             OtherSensors[センサー群]
         end
     end
     
-    subgraph "Data Collection Layer (任意のLinux環境)"
+    subgraph "Collection/Application Layer (任意のLinux環境)"
         MQTT[MQTT Broker<br/>mosquitto]
-        Collector[Sensor Collector Service<br/>- データ収集<br/>- しきい値判定<br/>- イベント処理]
-        InfluxDB[(InfluxDB<br/>時系列データ)]
-        MariaDB[(MariaDB<br/>設定データ)]
-    end
-    
-    subgraph "Application Layer (任意のLinux環境/クラウド)"
-        Streamlit[Streamlit<br/>設定管理UI]
+        Collector[Data Collector Service<br/>- 自己完結型データ処理<br/>- しきい値判定<br/>- イベント処理]
+        InfluxDB[(InfluxDB<br/>時系列データのみ)]
+        Streamlit[Streamlit<br/>統合管理UI]
         Grafana[Grafana<br/>ダッシュボード]
         API[REST API<br/>外部連携]
     end
     
+    %% Edge Gateway internal connections
+    RPi4Sensors -.-> RPi4HAL
+    RPi4HAL -.->|設定参照| RPi4DB
+    
+    RPi5Sensors -.-> RPi5HAL
+    RPi5HAL -.->|設定参照| RPi5DB
+    
+    OtherSensors -.-> OtherHAL
+    OtherHAL -.->|設定参照| OtherDB
+    
     %% Edge to Collection connections
-    RPi4HAL -->|MQTT Publish| MQTT
-    RPi5HAL -->|MQTT Publish| MQTT
-    OtherHAL -->|MQTT Publish| MQTT
+    RPi4HAL -->|自己完結型<br/>MQTTメッセージ| MQTT
+    RPi5HAL -->|自己完結型<br/>MQTTメッセージ| MQTT
+    OtherHAL -->|自己完結型<br/>MQTTメッセージ| MQTT
     
     %% Collection Layer connections
     MQTT --> Collector
     Collector --> InfluxDB
-    Collector -.->|設定読込| MariaDB
     
     %% Application Layer connections
-    Streamlit --> MariaDB
+    Streamlit --> InfluxDB
     Grafana --> InfluxDB
     API --> InfluxDB
-    API --> MariaDB
-    
-    %% Hardware connections
-    RPi4Sensors -.-> RPi4HAL
-    RPi5Sensors -.-> RPi5HAL
-    OtherSensors -.-> OtherHAL
     
     %% Styling
     classDef edge fill:#ff7f0e,stroke:#fff,stroke-width:2px,color:#fff
@@ -83,192 +85,256 @@ graph TB
     classDef application fill:#1f77b4,stroke:#fff,stroke-width:2px,color:#fff
     classDef storage fill:#d62728,stroke:#fff,stroke-width:2px,color:#fff
     
-    class RPi4HAL,RPi5HAL,OtherHAL,RPi4Sensors,RPi5Sensors,OtherSensors edge
+    class RPi4HAL,RPi5HAL,OtherHAL,RPi4Sensors,RPi5Sensors,OtherSensors,RPi4DB,RPi5DB,OtherDB edge
     class MQTT,Collector collection
     class Streamlit,Grafana,API application
-    class InfluxDB,MariaDB storage
+    class InfluxDB storage
 ```
 
-## 3層アーキテクチャ詳細
+## エッジゲートウェイアーキテクチャ詳細
 
-### Layer 1: Edge Devices Layer（エッジデバイス層）
+### Layer 1: Edge Gateway Layer（エッジゲートウェイ層）
 
 **責務**
-- ハードウェア固有の処理に特化
-- センサーデータの読み取りと前処理
-- MQTTによるデータ送信
+- 複数センサーの統合管理
+- ローカル設定としきい値の管理
+- 自己完結型MQTTメッセージの送信
 
-**Hardware Access Service**
+**Edge Gateway Service**
 ```python
-# edge/hardware_access_service.py
-class HardwareAccessService:
-    def __init__(self, device_type: str):
-        self.gpio = get_gpio_interface(device_type)  # RPi4/5/Other
-        self.i2c = get_i2c_interface(device_type)
+# edge/gateway_service.py
+class EdgeGatewayService:
+    def __init__(self, gateway_id: str):
+        self.gateway_id = gateway_id
+        self.db = LocalMariaDB()  # ローカル設定DB
         self.sensors = load_sensor_drivers()
+        self.mqtt_client = MQTTClient()
     
     async def collect_and_publish(self):
         for sensor in self.sensors:
-            data = sensor.read()
-            await self.mqtt_client.publish(f"sensors/{sensor.id}", data)
+            # センサー値読み取り
+            value = sensor.read()
+            
+            # ローカル設定を取得
+            config = self.db.get_sensor_config(sensor.id)
+            
+            # 自己完結型メッセージを構築
+            message = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "gateway_id": self.gateway_id,
+                "sensor": {
+                    "id": sensor.id,
+                    "type": config.sensor_type,
+                    "name": config.name,
+                    "unit": config.unit,
+                    "value": value
+                },
+                "thresholds": {
+                    "high": config.threshold_high,
+                    "low": config.threshold_low
+                },
+                "metadata": {
+                    "location": config.location,
+                    "calibration": config.offset
+                }
+            }
+            
+            await self.mqtt_client.publish("sensors/data", message)
 ```
 
 **デバイス固有実装**
-- **RPi4**: RPi.GPIO + sysfs
+- **RPi4**: RPi.GPIO + BravePI Hub
 - **RPi5**: libgpiod + 新GPIO API
 - **Orange Pi/Jetson**: デバイス固有ライブラリ
 
-### Layer 2: Data Collection Layer（データ収集層）
+### Layer 2: Collection/Application Layer（統合処理層）
 
 **責務**
-- 複数エッジデバイスからのデータ統合
-- しきい値判定とイベント処理
-- データベースへの永続化
+- 自己完結型メッセージの受信と処理
+- 時系列データの永続化
+- 統合ダッシュボードとAPI提供
 
 **技術スタック**
 - MQTT Broker (mosquitto)
 - FastAPI + asyncio
-- InfluxDB (時系列データ)
-- MariaDB (設定データ)
+- InfluxDB (時系列データのみ)
+- Streamlit (統合管理UI)
+- Grafana (可視化)
+
+**Data Collector Service**
+```python
+# collector/data_collector.py
+class DataCollectorService:
+    def __init__(self):
+        self.influxdb = InfluxDBClient()
+        self.mqtt_client = MQTTClient()
+    
+    async def on_sensor_message(self, message):
+        data = json.loads(message)
+        
+        # メッセージに全ての情報が含まれているので、
+        # 外部設定を参照せずに処理可能
+        sensor_value = data["sensor"]["value"]
+        thresholds = data["thresholds"]
+        
+        # しきい値判定
+        if sensor_value > thresholds["high"]:
+            await self.trigger_alert(data)
+        
+        # InfluxDBに保存（設定情報もタグとして保存）
+        await self.influxdb.write({
+            "measurement": data["sensor"]["type"],
+            "tags": {
+                "gateway_id": data["gateway_id"],
+                "sensor_id": data["sensor"]["id"],
+                "location": data["metadata"]["location"]
+            },
+            "fields": {
+                "value": sensor_value
+            },
+            "timestamp": data["timestamp"]
+        })
+```
 
 **特徴**
-- ハードウェア非依存
-- 任意のLinux環境で動作
-- 水平スケーリング可能
+- **設定非依存**: MQTTメッセージが自己完結
+- **シンプル**: 設定同期やAPI呼び出し不要
+- **堅牢**: ネットワーク障害に強い
+- **スケーラブル**: 複数ゲートウェイからの統合処理
 
-### Layer 3: Application Layer（アプリケーション層）
-
-**責務**
-- ユーザーインターフェース
-- データ可視化
-- 外部システム連携
-
-**コンポーネント**
-- Streamlit: 設定管理UI
-- Grafana: ダッシュボード
-- REST API: 外部連携
-
-**特徴**
-- 完全にハードウェア非依存
-- クラウドでも動作可能
-- マルチテナント対応
-
-## 分散アーキテクチャ対応ディレクトリ構造
+## エッジゲートウェイ対応ディレクトリ構造
 
 ```
-iot-distributed-system/
-├── edge/                    # エッジデバイス層（各SBCで実行）
-│   ├── hardware_access_service.py    # ハードウェアアクセスサービス
-│   ├── sensors/                      # センサードライバー
+iot-gateway-system/
+├── edge-gateway/            # エッジゲートウェイ層（各ゲートウェイで実行）
+│   ├── gateway_service.py   # ゲートウェイサービス
+│   ├── sensors/             # センサードライバー
 │   │   ├── __init__.py
-│   │   ├── base.py                   # 基底クラス
+│   │   ├── base.py         # 基底クラス
 │   │   ├── i2c/
-│   │   │   ├── vl53l1x.py           # 測距センサー
-│   │   │   ├── opt3001.py           # 照度センサー
-│   │   │   ├── mcp3427.py           # ADCセンサー
-│   │   │   ├── mcp9600.py           # 熱電対センサー
-│   │   │   ├── lis2duxs12.py        # 加速度センサー
-│   │   │   └── sdp610.py            # 差圧センサー
+│   │   │   ├── vl53l1x.py   # 測距センサー
+│   │   │   ├── opt3001.py   # 照度センサー
+│   │   │   ├── mcp3427.py   # ADCセンサー
+│   │   │   ├── mcp9600.py   # 熱電対センサー
+│   │   │   ├── lis2duxs12.py # 加速度センサー
+│   │   │   └── sdp610.py    # 差圧センサー
 │   │   ├── gpio/
-│   │   │   └── gpio.py              # GPIO入出力
-│   │   └── serial/
-│   │       └── brave.py             # BravePIシリアル通信
-│   ├── hardware/                     # ハードウェア抽象化層
+│   │   │   └── gpio.py      # GPIO入出力
+│   │   ├── serial/
+│   │   │   └── brave.py     # BravePIシリアル通信
+│   │   └── brave_hub/
+│   │       └── brave_hub.py # BravePI Hub管理
+│   ├── hardware/            # ハードウェア抽象化層
 │   │   ├── __init__.py
-│   │   ├── interfaces.py            # 抽象インターフェース
+│   │   ├── interfaces.py    # 抽象インターフェース
 │   │   ├── rpi4/
-│   │   │   ├── gpio.py             # RPi4 GPIO実装
-│   │   │   └── i2c.py              # RPi4 I2C実装
+│   │   │   ├── gpio.py     # RPi4 GPIO実装
+│   │   │   └── i2c.py      # RPi4 I2C実装
 │   │   ├── rpi5/
-│   │   │   ├── gpio.py             # RPi5 GPIO実装（libgpiod）
-│   │   │   └── i2c.py              # RPi5 I2C実装
+│   │   │   ├── gpio.py     # RPi5 GPIO実装（libgpiod）
+│   │   │   └── i2c.py      # RPi5 I2C実装
 │   │   └── mock/
-│   │       ├── gpio.py             # テスト用モック
-│   │       └── i2c.py              # テスト用モック
+│   │       ├── gpio.py     # テスト用モック
+│   │       └── i2c.py      # テスト用モック
+│   ├── database/            # ローカルMariaDB管理
+│   │   ├── models.py       # SQLAlchemyモデル
+│   │   ├── migrations/     # DBマイグレーション
+│   │   └── init.sql        # 初期化スクリプト
 │   ├── config/
-│   │   └── edge_config.yml         # エッジデバイス設定
-│   └── requirements-edge.txt        # エッジ用依存関係
+│   │   └── gateway_config.yml # ゲートウェイ設定
+│   └── requirements-gateway.txt # ゲートウェイ用依存関係
 │
-├── collector/               # データ収集層（任意のLinux環境）
+├── collection-server/       # 統合処理層（任意のLinux環境）
 │   ├── main.py             # FastAPIアプリケーション
-│   ├── mqtt_subscriber.py  # MQTTデータ受信
-│   ├── processor.py        # しきい値判定・イベント処理
-│   ├── storage.py          # データベース書き込み
-│   ├── notifier.py         # 通知処理
-│   ├── models.py           # Pydanticモデル
-│   ├── config/
-│   │   └── collector_config.yml
-│   └── requirements-collector.txt
-│
-├── application/             # アプリケーション層（任意のLinux環境/クラウド）
-│   ├── streamlit_app/       # 設定管理UI
+│   ├── data_collector.py   # MQTTデータ受信・処理
+│   ├── storage.py          # InfluxDB書き込み
+│   ├── alert_manager.py    # アラート処理
+│   ├── api/                # REST API
+│   │   ├── __init__.py
+│   │   ├── routers/
+│   │   │   ├── gateways.py # ゲートウェイ管理
+│   │   │   ├── sensors.py  # センサーデータ
+│   │   │   └── alerts.py   # アラート管理
+│   │   └── models.py       # APIモデル
+│   ├── streamlit_app/      # 統合管理UI
 │   │   ├── main.py
 │   │   ├── pages/
-│   │   │   ├── devices.py   # デバイス管理
-│   │   │   ├── sensors.py   # センサー設定
-│   │   │   └── alerts.py    # アラート設定
-│   │   └── models.py        # SQLAlchemyモデル
-│   ├── api/                 # REST API
-│   │   ├── main.py
-│   │   ├── routers/
-│   │   │   ├── devices.py
-│   │   │   ├── sensors.py
-│   │   │   └── data.py
-│   │   └── models.py
+│   │   │   ├── overview.py    # 全体概要
+│   │   │   ├── gateways.py    # ゲートウェイ状況
+│   │   │   ├── sensors.py     # センサー一覧
+│   │   │   └── alerts.py      # アラート管理
+│   │   └── components/
+│   │       ├── charts.py      # グラフコンポーネント
+│   │       └── tables.py      # テーブルコンポーネント
 │   ├── config/
-│   │   └── app_config.yml
-│   └── requirements-app.txt
+│   │   └── server_config.yml
+│   └── requirements-server.txt
 │
 ├── common/                  # 共通ライブラリ（全層で使用）
 │   ├── __init__.py
-│   ├── database.py          # DB接続管理
 │   ├── mqtt_client.py       # MQTT共通クライアント
+│   ├── message_format.py    # 自己完結型メッセージ定義
 │   ├── config_loader.py     # 設定ファイル読み込み
 │   ├── logger.py            # ロギング設定
 │   └── models/              # 共通データモデル
-│       ├── sensor_data.py
-│       └── device_config.py
+│       ├── sensor_data.py   # センサーデータ構造
+│       ├── gateway_info.py  # ゲートウェイ情報
+│       └── alert_rule.py    # アラートルール
 │
 ├── infrastructure/          # インフラストラクチャ構成
-│   ├── docker/              # Dockerコンテナ構成
+│   ├── docker/              # Dockerコンテナ構成（Collection層用）
 │   │   ├── docker-compose.yml       # 開発環境用
 │   │   ├── docker-compose.prod.yml  # 本番環境用
 │   │   ├── influxdb/
-│   │   │   └── Dockerfile
-│   │   ├── mariadb/
-│   │   │   └── Dockerfile
+│   │   │   ├── Dockerfile
+│   │   │   └── config/
 │   │   ├── grafana/
 │   │   │   ├── Dockerfile
-│   │   │   └── dashboards/
+│   │   │   ├── dashboards/
+│   │   │   └── provisioning/
 │   │   └── mosquitto/
 │   │       ├── Dockerfile
 │   │       └── config/
-│   ├── systemd/             # systemdサービス定義
-│   │   ├── edge-service.service
+│   ├── gateway-setup/       # ゲートウェイセットアップ
+│   │   ├── mariadb/
+│   │   │   ├── install.sh
+│   │   │   └── init.sql
+│   │   └── systemd/
+│   │       └── gateway-service.service
+│   ├── systemd/             # Collection層systemdサービス
 │   │   ├── collector-service.service
 │   │   └── streamlit-app.service
 │   └── ansible/             # デプロイメント自動化
 │       ├── playbooks/
+│       │   ├── deploy-gateway.yml
+│       │   └── deploy-server.yml
 │       └── inventory/
 │
 ├── tests/                   # テストコード
-│   ├── test_edge/
-│   ├── test_collector/
-│   ├── test_application/
+│   ├── test_gateway/
+│   │   ├── test_sensors/
+│   │   └── test_message_format/
+│   ├── test_server/
+│   │   ├── test_collector/
+│   │   └── test_api/
 │   └── test_common/
 │
 ├── docs/                    # ドキュメント
 │   ├── deployment/          # デプロイメントガイド
+│   │   ├── gateway-setup.md
+│   │   └── server-setup.md
 │   ├── api/                 # API仕様
+│   │   └── message-format.md # MQTTメッセージ仕様
 │   └── troubleshooting/     # トラブルシューティング
 │
 ├── scripts/                 # 運用スクリプト
-│   ├── deploy_edge.sh       # エッジデバイスデプロイ
-│   ├── deploy_collector.sh  # コレクターデプロイ
-│   └── health_check.py      # ヘルスチェック
+│   ├── deploy_gateway.sh    # ゲートウェイデプロイ
+│   ├── deploy_server.sh     # サーバーデプロイ
+│   ├── gateway_health.py    # ゲートウェイヘルスチェック
+│   └── sync_config.py       # 設定同期（必要に応じて）
 │
 └── config/                  # 全体設定
-    ├── global_config.yml    # グローバル設定
+    ├── message_schema.json  # MQTTメッセージスキーマ
     └── environments/        # 環境別設定
         ├── development.yml
         ├── staging.yml
@@ -380,40 +446,62 @@ graph TB
 
 ## データフロー
 
-### 1. センサーデータ収集フロー
+### 1. 自己完結型データフロー
 
 ```mermaid
 flowchart LR
-    Sensor[センサー] --> Driver[ドライバー]
-    Driver --> Collector[Collector]
+    Sensors[複数センサー] --> Gateway[Edge Gateway]
+    Gateway --> LocalDB[(ローカルMariaDB)]
+    Gateway --> Message[自己完結型<br/>MQTTメッセージ]
+    
+    Message --> MQTT[MQTT Broker]
+    MQTT --> Collector[Data Collector]
     Collector --> InfluxDB[(InfluxDB)]
+    Collector --> Alert{しきい値判定}
+    Alert -->|超過| Notify[通知]
+    
     InfluxDB --> Grafana[Grafana]
+    InfluxDB --> Streamlit[Streamlit]
     
-    Collector --> Threshold{しきい値判定}
-    Threshold -->|超過| Event[イベント発火]
-    Event --> MQTT[MQTT]
-    Event --> Email[Email]
-    
-    style Sensor fill:#ff7f0e,stroke:#fff,color:#fff
-    style Driver fill:#2ca02c,stroke:#fff,color:#fff
-    style Collector fill:#1f77b4,stroke:#fff,color:#fff
+    style Sensors fill:#ff7f0e,stroke:#fff,color:#fff
+    style Gateway fill:#ff7f0e,stroke:#fff,color:#fff
+    style LocalDB fill:#ff7f0e,stroke:#fff,color:#fff
+    style Message fill:#2ca02c,stroke:#fff,color:#fff
+    style MQTT fill:#2ca02c,stroke:#fff,color:#fff
+    style Collector fill:#2ca02c,stroke:#fff,color:#fff
     style InfluxDB fill:#d62728,stroke:#fff,color:#fff
-    style Grafana fill:#9467bd,stroke:#fff,color:#fff
+    style Grafana fill:#1f77b4,stroke:#fff,color:#fff
+    style Streamlit fill:#1f77b4,stroke:#fff,color:#fff
 ```
 
-### 2. 設定管理フロー
+### 2. MQTTメッセージ構造
 
-```mermaid
-flowchart LR
-    UI[Streamlit UI] --> API[FastAPI]
-    API --> DB[(MariaDB)]
-    DB --> Service[Collector Service]
-    Service --> Reload[設定リロード]
-    
-    style UI fill:#9467bd,stroke:#fff,color:#fff
-    style API fill:#1f77b4,stroke:#fff,color:#fff
-    style DB fill:#d62728,stroke:#fff,color:#fff
-    style Service fill:#1f77b4,stroke:#fff,color:#fff
+```json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "gateway_id": "rpi4-factory-001",
+  "sensor": {
+    "id": "temp-room-01",
+    "type": "temperature",
+    "name": "工場内温度センサー",
+    "unit": "℃",
+    "value": 25.3
+  },
+  "thresholds": {
+    "high": 30.0,
+    "low": 10.0,
+    "hysteresis": 1.0
+  },
+  "metadata": {
+    "location": "製造ライン1",
+    "calibration_offset": 0.2,
+    "last_calibrated": "2024-01-01T00:00:00Z"
+  },
+  "quality": {
+    "confidence": 0.95,
+    "error_status": "ok"
+  }
+}
 ```
 
 ## 分散アーキテクチャ移行戦略
