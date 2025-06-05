@@ -98,6 +98,7 @@ graph TB
 **責務**
 - 複数センサーの統合管理
 - ローカル設定としきい値の管理
+- ローカルStreamlit設定UI提供
 - 自己完結型MQTTメッセージの送信
 
 **Edge Gateway Service**
@@ -142,9 +143,185 @@ class EdgeGatewayService:
             await self.mqtt_client.publish("sensors/data", message)
 ```
 
+**Local Streamlit Configuration UI**
+```python
+# edge/config_ui.py
+import streamlit as st
+from database import LocalMariaDB
+
+st.set_page_config(page_title="Gateway Config", page_icon="🌡️")
+
+st.title("🌡️ センサーゲートウェイ設定")
+
+# サイドバーでゲートウェイ情報表示
+with st.sidebar:
+    st.info(f"Gateway ID: {st.session_state.gateway_id}")
+    st.metric("接続センサー数", len(sensors))
+    st.metric("稼働時間", get_uptime())
+    st.metric("MQTT接続", "🟢 接続中" if mqtt_connected else "🔴 切断")
+
+# メインエリア
+tab1, tab2, tab3, tab4 = st.tabs(["センサー一覧", "しきい値設定", "システム状態", "ネットワーク"])
+
+with tab1:
+    st.subheader("接続センサー一覧")
+    
+    # リアルタイム更新（autorefresh）
+    if st.button("🔄 更新"):
+        st.rerun()
+    
+    # センサー一覧表示
+    for sensor in get_sensors():
+        with st.container():
+            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+            with col1:
+                st.write(f"**{sensor.name}**")
+                st.caption(f"{sensor.type} | ID: {sensor.id}")
+            with col2:
+                current_value = sensor.get_current_value()
+                st.metric("現在値", f"{current_value:.2f} {sensor.unit}")
+            with col3:
+                status = "🟢 正常" if sensor.is_healthy() else "🔴 異常"
+                st.write(status)
+            with col4:
+                if st.button("⚙️", key=f"config_{sensor.id}"):
+                    st.session_state.edit_sensor = sensor.id
+            st.divider()
+
+with tab2:
+    st.subheader("しきい値設定")
+    
+    # センサー選択
+    sensor_options = [(s.id, f"{s.name} ({s.type})") for s in sensors]
+    selected_sensor_id = st.selectbox(
+        "設定するセンサーを選択",
+        options=[opt[0] for opt in sensor_options],
+        format_func=lambda x: next(opt[1] for opt in sensor_options if opt[0] == x)
+    )
+    
+    if selected_sensor_id:
+        sensor = get_sensor_by_id(selected_sensor_id)
+        current_config = get_sensor_config(selected_sensor_id)
+        
+        st.write(f"**{sensor.name}** の設定")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            high_threshold = st.number_input(
+                "上限値", 
+                value=current_config.threshold_high,
+                step=0.1,
+                format="%.2f"
+            )
+            hysteresis_high = st.number_input(
+                "上限ヒステリシス", 
+                value=current_config.hysteresis_high,
+                step=0.1,
+                format="%.2f"
+            )
+        with col2:
+            low_threshold = st.number_input(
+                "下限値", 
+                value=current_config.threshold_low,
+                step=0.1,
+                format="%.2f"
+            )
+            hysteresis_low = st.number_input(
+                "下限ヒステリシス", 
+                value=current_config.hysteresis_low,
+                step=0.1,
+                format="%.2f"
+            )
+        
+        # 較正設定
+        st.subheader("較正設定")
+        offset = st.number_input(
+            "オフセット値", 
+            value=current_config.offset,
+            step=0.01,
+            format="%.3f"
+        )
+        
+        # 保存ボタン
+        if st.button("💾 設定を保存", type="primary"):
+            save_sensor_config(selected_sensor_id, {
+                "threshold_high": high_threshold,
+                "threshold_low": low_threshold,
+                "hysteresis_high": hysteresis_high,
+                "hysteresis_low": hysteresis_low,
+                "offset": offset
+            })
+            st.success("✅ 設定を保存しました")
+            st.rerun()
+
+with tab3:
+    st.subheader("システム状態")
+    
+    # システム情報
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("CPU使用率", f"{get_cpu_usage():.1f}%")
+    with col2:
+        st.metric("メモリ使用率", f"{get_memory_usage():.1f}%")
+    with col3:
+        st.metric("ディスク使用率", f"{get_disk_usage():.1f}%")
+    
+    # サービス状態
+    st.subheader("サービス状態")
+    services = [
+        ("Gateway Service", "gateway-service"),
+        ("MariaDB", "mariadb"),
+        ("MQTT Client", "mqtt")
+    ]
+    
+    for service_name, service_id in services:
+        status = get_service_status(service_id)
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            st.write(service_name)
+        with col2:
+            st.write("🟢 稼働中" if status == "running" else "🔴 停止")
+        with col3:
+            if st.button("再起動", key=f"restart_{service_id}"):
+                restart_service(service_id)
+                st.rerun()
+
+with tab4:
+    st.subheader("ネットワーク設定")
+    
+    # MQTT設定
+    st.write("**MQTT設定**")
+    mqtt_config = get_mqtt_config()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        mqtt_host = st.text_input("MQTTブローカーホスト", value=mqtt_config.host)
+        mqtt_port = st.number_input("ポート", value=mqtt_config.port, min_value=1, max_value=65535)
+    with col2:
+        mqtt_username = st.text_input("ユーザー名", value=mqtt_config.username)
+        mqtt_password = st.text_input("パスワード", type="password", value="")
+    
+    if st.button("💾 MQTT設定を保存"):
+        save_mqtt_config({
+            "host": mqtt_host,
+            "port": mqtt_port,
+            "username": mqtt_username,
+            "password": mqtt_password if mqtt_password else mqtt_config.password
+        })
+        st.success("✅ MQTT設定を保存しました")
+        st.rerun()
+    
+    # 接続テスト
+    if st.button("🔗 MQTT接続テスト"):
+        if test_mqtt_connection():
+            st.success("✅ MQTT接続成功")
+        else:
+            st.error("❌ MQTT接続失敗")
+```
+
 **デバイス固有実装**
 - **RPi4**: RPi.GPIO + BravePI Hub
-- **RPi5**: libgpiod + 新GPIO API
+- **RPi5**: libgpiod + 新GPIO API  
 - **Orange Pi/Jetson**: デバイス固有ライブラリ
 
 ### Layer 2: Collection/Application Layer（統合処理層）
@@ -208,6 +385,7 @@ class DataCollectorService:
 iot-gateway-system/
 ├── edge-gateway/            # エッジゲートウェイ層（各ゲートウェイで実行）
 │   ├── gateway_service.py   # ゲートウェイサービス
+│   ├── config_ui.py         # ローカルStreamlit設定UI
 │   ├── sensors/             # センサードライバー
 │   │   ├── __init__.py
 │   │   ├── base.py         # 基底クラス
@@ -347,53 +525,66 @@ iot-gateway-system/
 
 ```mermaid
 graph TB
-    subgraph "Edge Device 1 (RPi4)"
-        EdgeService1[Hardware Access Service<br/>ネイティブ実行]
-        EdgeHW1[センサー群]
-    end
-    
-    subgraph "Edge Device 2 (RPi5)"
-        EdgeService2[Hardware Access Service<br/>ネイティブ実行]
-        EdgeHW2[センサー群]
-    end
-    
-    subgraph "Data Collection Server (任意のLinux)"
+    subgraph "Edge Gateway 1 (RPi4)"
         subgraph "Native Services"
-            CollectorApp[Collector Service<br/>FastAPI]
-            StreamlitApp[Streamlit UI]
+            Gateway1[Gateway Service]
+            ConfigUI1[Streamlit Config UI<br/>:8501]
+        end
+        subgraph "Local Storage"
+            LocalDB1[(MariaDB<br/>ローカル設定)]
+        end
+        Gateway1Sensors[BravePI + センサー群]
+    end
+    
+    subgraph "Edge Gateway 2 (RPi5)"
+        subgraph "Native Services"
+            Gateway2[Gateway Service]
+            ConfigUI2[Streamlit Config UI<br/>:8501]
+        end
+        subgraph "Local Storage"
+            LocalDB2[(MariaDB<br/>ローカル設定)]
+        end
+        Gateway2Sensors[センサー群]
+    end
+    
+    subgraph "Collection/Application Server (任意のLinux)"
+        subgraph "Native Services"
+            CollectorApp[Data Collector Service<br/>FastAPI :8000]
+            IntegratedUI[統合Streamlit UI<br/>:8502]
         end
         
         subgraph "Docker Services"
-            MQTT[MQTT Broker<br/>mosquitto]
-            InfluxDB[(InfluxDB)]
-            MariaDB[(MariaDB)]
-            Grafana[Grafana]
+            MQTT[MQTT Broker<br/>mosquitto :1883]
+            InfluxDB[(InfluxDB<br/>:8086)]
+            Grafana[Grafana<br/>:3000]
         end
     end
     
-    subgraph "Cloud/Remote (Optional)"
+    subgraph "Remote Access"
         CloudAPI[REST API<br/>外部連携]
-        CloudUI[Web Dashboard]
     end
     
+    %% Gateway internal connections
+    Gateway1Sensors -.-> Gateway1
+    Gateway1 -.->|設定参照| LocalDB1
+    ConfigUI1 -.->|設定管理| LocalDB1
+    
+    Gateway2Sensors -.-> Gateway2
+    Gateway2 -.->|設定参照| LocalDB2
+    ConfigUI2 -.->|設定管理| LocalDB2
+    
     %% Edge to Collection
-    EdgeService1 -->|MQTT| MQTT
-    EdgeService2 -->|MQTT| MQTT
+    Gateway1 -->|自己完結型MQTT| MQTT
+    Gateway2 -->|自己完結型MQTT| MQTT
     
     %% Collection layer
     MQTT --> CollectorApp
     CollectorApp --> InfluxDB
-    CollectorApp --> MariaDB
-    StreamlitApp --> MariaDB
+    IntegratedUI --> InfluxDB
     Grafana --> InfluxDB
     
-    %% Cloud integration
+    %% External access
     CloudAPI --> InfluxDB
-    CloudAPI --> MariaDB
-    
-    %% Hardware connections
-    EdgeHW1 -.-> EdgeService1
-    EdgeHW2 -.-> EdgeService2
     
     %% Styling
     classDef edge fill:#ff7f0e,stroke:#fff,stroke-width:2px,color:#fff
@@ -401,33 +592,52 @@ graph TB
     classDef container fill:#1f77b4,stroke:#fff,stroke-width:2px,color:#fff
     classDef cloud fill:#9467bd,stroke:#fff,stroke-width:2px,color:#fff
     
-    class EdgeService1,EdgeService2,EdgeHW1,EdgeHW2 edge
-    class CollectorApp,StreamlitApp collection
-    class MQTT,InfluxDB,MariaDB,Grafana container
-    class CloudAPI,CloudUI cloud
+    class Gateway1,Gateway2,ConfigUI1,ConfigUI2,LocalDB1,LocalDB2,Gateway1Sensors,Gateway2Sensors edge
+    class CollectorApp,IntegratedUI collection
+    class MQTT,InfluxDB,Grafana container
+    class CloudAPI cloud
 ```
 
 ### 層別ポート構成
 
-#### Edge Layer
-| サービス | 実行環境 | ポート | 用途 |
-|---------|---------|--------|------|
-| Hardware Access Service | Native | - | MQTTクライアント |
+#### Edge Gateway Layer
+| サービス | 実行環境 | ポート | 用途 | アクセス方法 |
+|---------|---------|--------|------|----------|
+| Gateway Service | Native | - | センサーデータ収集 | systemdサービス |
+| Streamlit Config UI | Native | 8501 | ローカル設定管理 | http://gateway-ip:8501 |
+| MariaDB | Native/Docker | 3306 | ローカル設定保存 | 内部アクセスのみ |
 
-#### Collection Layer
-| サービス | 実行環境 | ポート | 用途 |
-|---------|---------|--------|------|
-| MQTT Broker | Docker | 1883 | デバイス間通信 |
-| Collector Service | Native | 8000 | データ収集API |
-| Streamlit UI | Native | 8501 | 設定管理 |
-| InfluxDB | Docker | 8086 | 時系列DB |
-| MariaDB | Docker | 3306 | 設定DB |
-| Grafana | Docker | 3000 | 可視化 |
+#### Collection/Application Layer
+| サービス | 実行環境 | ポート | 用途 | アクセス方法 |
+|---------|---------|--------|------|----------|
+| MQTT Broker | Docker | 1883 | ゲートウェイ間通信 | mqtt://server-ip:1883 |
+| Data Collector Service | Native | 8000 | データ収集API | http://server-ip:8000 |
+| 統合Streamlit UI | Native | 8502 | 全体管理・監視 | http://server-ip:8502 |
+| InfluxDB | Docker | 8086 | 時系列データ保存 | 内部アクセスのみ |
+| Grafana | Docker | 3000 | データ可視化 | http://server-ip:3000 |
 
-#### Application Layer
-| サービス | 実行環境 | ポート | 用途 |
-|---------|---------|--------|------|
-| REST API | Native/Cloud | 8080 | 外部連携 |
+#### 推奨アクセス方法
+
+**ローカル設定（各ゲートウェイ）**
+```bash
+# RPi4ゲートウェイの設定
+http://192.168.1.100:8501
+
+# RPi5ゲートウェイの設定  
+http://192.168.1.101:8501
+```
+
+**統合監視・管理（サーバー）**
+```bash
+# 統合管理画面
+http://192.168.1.200:8502
+
+# データ可視化
+http://192.168.1.200:3000
+
+# API アクセス
+http://192.168.1.200:8000/docs
+```
 
 ### 各層の技術選択理由
 
