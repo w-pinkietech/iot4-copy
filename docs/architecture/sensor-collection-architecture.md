@@ -206,10 +206,91 @@ iot-system/
 │   ├── test_collector/
 │   └── test_config/
 │
-├── docker-compose.yml   # コンテナ構成
+├── docker/              # Dockerコンテナ構成
+│   ├── docker-compose.yml
+│   ├── influxdb/
+│   │   └── Dockerfile
+│   └── mariadb/
+│       └── Dockerfile
+│
 ├── requirements.txt     # Python依存関係
 └── config.yml          # アプリケーション設定
 ```
+
+## インフラストラクチャ構成
+
+### 実行環境の分離
+
+```mermaid
+graph TB
+    subgraph "Raspberry Pi 4 Host"
+        subgraph "Native Environment"
+            Python[Python Runtime]
+            SensorDrivers[センサードライバー<br/>- I2C通信<br/>- GPIO制御<br/>- Serial通信]
+            CollectorService[Sensor Collector Service<br/>FastAPI Application]
+            StreamlitApp[Streamlit<br/>設定UI]
+        end
+        
+        subgraph "Docker Containers"
+            MariaDBContainer[(MariaDB<br/>設定データ)]
+            InfluxDBContainer[(InfluxDB<br/>時系列データ)]
+            GrafanaContainer[Grafana<br/>可視化]
+        end
+        
+        subgraph "Host Resources"
+            I2CBus[/dev/i2c-1]
+            GPIOPins[/sys/class/gpio]
+            SerialPort[/dev/ttyUSB0]
+        end
+    end
+    
+    %% Native environment connections
+    Python --> SensorDrivers
+    SensorDrivers --> CollectorService
+    Python --> CollectorService
+    Python --> StreamlitApp
+    
+    %% Hardware access
+    SensorDrivers --> I2CBus
+    SensorDrivers --> GPIOPins
+    SensorDrivers --> SerialPort
+    
+    %% Container connections
+    CollectorService -->|Port 8086| InfluxDBContainer
+    CollectorService -->|Port 3306| MariaDBContainer
+    StreamlitApp -->|Port 3306| MariaDBContainer
+    GrafanaContainer -->|Port 8086| InfluxDBContainer
+    
+    %% Styling
+    classDef native fill:#2ca02c,stroke:#fff,stroke-width:2px,color:#fff
+    classDef container fill:#1f77b4,stroke:#fff,stroke-width:2px,color:#fff
+    classDef hardware fill:#ff7f0e,stroke:#fff,stroke-width:2px,color:#fff
+    
+    class Python,SensorDrivers,CollectorService,StreamlitApp native
+    class MariaDBContainer,InfluxDBContainer,GrafanaContainer container
+    class I2CBus,GPIOPins,SerialPort hardware
+```
+
+### ポート構成
+
+| サービス | 実行環境 | ポート | 用途 |
+|---------|---------|--------|------|
+| Sensor Collector | Native | 8000 | FastAPI (データ収集API) |
+| Streamlit | Native | 8501 | 設定UI |
+| MariaDB | Docker | 3306 | 設定データベース |
+| InfluxDB | Docker | 8086 | 時系列データベース |
+| Grafana | Docker | 3000 | ダッシュボード |
+
+### 実行環境の選択理由
+
+**ネイティブ環境で実行**
+- **センサードライバー**: ハードウェアへの直接アクセスが必要
+- **Collector Service**: 低レイテンシとリアルタイム性が重要
+- **Streamlit**: 軽量で頻繁な更新が想定される
+
+**Dockerコンテナで実行**
+- **データベース**: 隔離された環境での安定稼働
+- **Grafana**: 標準的なコンテナイメージの活用
 
 ## データフロー
 
