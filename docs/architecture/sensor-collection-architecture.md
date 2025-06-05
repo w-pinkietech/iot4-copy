@@ -76,11 +76,11 @@ graph TB
     Grafana -->|データ表示| InfluxDB
     
     %% Styling
-    classDef hardware fill:#FFE5B4,stroke:#333,stroke-width:2px
-    classDef driver fill:#B4E5FF,stroke:#333,stroke-width:2px
-    classDef service fill:#B4FFB4,stroke:#333,stroke-width:2px
-    classDef storage fill:#FFB4B4,stroke:#333,stroke-width:2px
-    classDef external fill:#E5B4FF,stroke:#333,stroke-width:2px
+    classDef hardware fill:#ff7f0e,stroke:#fff,stroke-width:2px,color:#fff
+    classDef driver fill:#2ca02c,stroke:#fff,stroke-width:2px,color:#fff
+    classDef service fill:#1f77b4,stroke:#fff,stroke-width:2px,color:#fff
+    classDef storage fill:#d62728,stroke:#fff,stroke-width:2px,color:#fff
+    classDef external fill:#9467bd,stroke:#fff,stroke-width:2px,color:#fff
     
     class I2C,GPIO,Serial hardware
     class I2CDriver,GPIODriver,SerialDriver driver
@@ -227,11 +227,11 @@ flowchart LR
     Event --> MQTT[MQTT]
     Event --> Email[Email]
     
-    style Sensor fill:#FFE5B4
-    style Driver fill:#B4E5FF
-    style Collector fill:#B4FFB4
-    style InfluxDB fill:#FFB4B4
-    style Grafana fill:#E5B4FF
+    style Sensor fill:#ff7f0e,stroke:#fff,color:#fff
+    style Driver fill:#2ca02c,stroke:#fff,color:#fff
+    style Collector fill:#1f77b4,stroke:#fff,color:#fff
+    style InfluxDB fill:#d62728,stroke:#fff,color:#fff
+    style Grafana fill:#9467bd,stroke:#fff,color:#fff
 ```
 
 ### 2. 設定管理フロー
@@ -243,10 +243,10 @@ flowchart LR
     DB --> Service[Collector Service]
     Service --> Reload[設定リロード]
     
-    style UI fill:#E5B4FF
-    style API fill:#B4FFB4
-    style DB fill:#FFB4B4
-    style Service fill:#B4FFB4
+    style UI fill:#9467bd,stroke:#fff,color:#fff
+    style API fill:#1f77b4,stroke:#fff,color:#fff
+    style DB fill:#d62728,stroke:#fff,color:#fff
+    style Service fill:#1f77b4,stroke:#fff,color:#fff
 ```
 
 ## 移行戦略
