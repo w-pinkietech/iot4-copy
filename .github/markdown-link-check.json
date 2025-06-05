@@ -1,0 +1,25 @@
+{
+  "ignorePatterns": [
+    {
+      "pattern": "^http://localhost"
+    },
+    {
+      "pattern": "^https://localhost"
+    },
+    {
+      "pattern": "^http://127.0.0.1"
+    },
+    {
+      "pattern": "^mailto:"
+    }
+  ],
+  "replacementPatterns": [
+    {
+      "pattern": "^/",
+      "replacement": "https://github.com/your-org/iot4-copy/blob/main/"
+    }
+  ],
+  "retryOn429": true,
+  "retryCount": 3,
+  "fallbackHttpStatus": [400, 401, 403, 404, 500, 502, 503, 504]
+}

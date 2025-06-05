@@ -1,0 +1,247 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: [ 'docs/**', '*.md' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'docs/**', '*.md' ]
+
+jobs:
+  lint-docs:
+    runs-on: ubuntu-latest
+    name: Lint Documentation
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli
+        
+      - name: Lint Markdown files
+        run: |
+          markdownlint docs/**/*.md README.md --config .markdownlint.json
+          
+      - name: Check broken links
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          use-verbose-mode: 'yes'
+          config-file: '.github/markdown-link-check.json'
+
+  validate-structure:
+    runs-on: ubuntu-latest
+    name: Validate Document Structure
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Check required documents
+        run: |
+          # Check core documentation exists
+          required_files=(
+            "docs/README.md"
+            "docs/architecture/overview.md"
+            "docs/technical/node-red-flows.md"
+            "docs/migration/overview.md"
+            "docs/guides/installation.md"
+            "docs/api/rest-api.md"
+          )
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Required file missing: $file"
+              exit 1
+            else
+              echo "✅ Found: $file"
+            fi
+          done
+          
+      - name: Validate document metadata
+        run: |
+          # Check that all markdown files have proper front matter or headers
+          find docs -name "*.md" -exec grep -L "^# " {} \; | while read file; do
+            echo "⚠️  Missing main header in: $file"
+          done
+
+  generate-index:
+    runs-on: ubuntu-latest
+    name: Generate Documentation Index
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Generate document index
+        run: |
+          python3 << 'EOF'
+          import os
+          import re
+          from pathlib import Path
+          
+          def extract_title(file_path):
+              """Extract title from markdown file"""
+              try:
+                  with open(file_path, 'r', encoding='utf-8') as f:
+                      content = f.read()
+                      match = re.search(r'^# (.+)$', content, re.MULTILINE)
+                      return match.group(1) if match else os.path.basename(file_path)
+              except:
+                  return os.path.basename(file_path)
+          
+          def generate_index():
+              """Generate documentation index"""
+              docs_dir = Path('docs')
+              index_content = []
+              
+              index_content.append("# ドキュメントインデックス\n")
+              index_content.append("## 自動生成されたファイル一覧\n")
+              
+              # Walk through docs directory
+              for root, dirs, files in os.walk(docs_dir):
+                  # Skip root README
+                  if root == str(docs_dir):
+                      continue
+                      
+                  # Process markdown files
+                  md_files = [f for f in files if f.endswith('.md')]
+                  if md_files:
+                      rel_path = os.path.relpath(root, docs_dir)
+                      index_content.append(f"### {rel_path}/\n")
+                      
+                      for md_file in sorted(md_files):
+                          file_path = os.path.join(root, md_file)
+                          title = extract_title(file_path)
+                          rel_file_path = os.path.relpath(file_path, docs_dir)
+                          index_content.append(f"- [{title}](./{rel_file_path})\n")
+                      
+                      index_content.append("\n")
+              
+              # Write index file
+              with open('docs/INDEX.md', 'w', encoding='utf-8') as f:
+                  f.writelines(index_content)
+                  
+              print("✅ Documentation index generated")
+          
+          generate_index()
+          EOF
+          
+      - name: Commit generated index
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          if git diff --quiet docs/INDEX.md; then
+            echo "No changes to commit"
+          else
+            git add docs/INDEX.md
+            git commit -m "docs: Update documentation index [skip ci]"
+            git push
+          fi
+
+  deploy-pages:
+    runs-on: ubuntu-latest
+    name: Deploy to GitHub Pages
+    if: github.ref == 'refs/heads/main'
+    needs: [lint-docs, validate-structure]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Install MkDocs
+        run: |
+          pip install mkdocs mkdocs-material mkdocs-mermaid2-plugin
+          
+      - name: Generate MkDocs config
+        run: |
+          cat > mkdocs.yml << 'EOF'
+          site_name: IoT導入支援キット Ver.4.1 ドキュメント
+          site_description: IoTシステムの包括的ドキュメント
+          site_url: https://your-org.github.io/iot4-copy
+          
+          theme:
+            name: material
+            language: ja
+            features:
+              - navigation.tabs
+              - navigation.sections
+              - navigation.expand
+              - search.highlight
+              - content.code.copy
+            palette:
+              - scheme: default
+                primary: blue
+                accent: blue
+                toggle:
+                  icon: material/brightness-7
+                  name: Switch to dark mode
+              - scheme: slate
+                primary: blue
+                accent: blue
+                toggle:
+                  icon: material/brightness-4
+                  name: Switch to light mode
+          
+          nav:
+            - ホーム: README.md
+            - アーキテクチャ:
+              - 概要: docs/architecture/overview.md
+            - 技術仕様:
+              - Node-REDフロー: docs/technical/node-red-flows.md
+              - システム分析: docs/technical/node-red-analysis.md
+            - システム移行:
+              - 移行ガイド: docs/migration/overview.md
+              - 分析手順: docs/migration/analysis-procedures.md
+            - 運用ガイド:
+              - インストール: docs/guides/installation.md
+            - API:
+              - REST API: docs/api/rest-api.md
+          
+          plugins:
+            - search
+            - mermaid2
+          
+          markdown_extensions:
+            - admonition
+            - codehilite
+            - toc:
+                permalink: true
+            - pymdownx.superfences:
+                custom_fences:
+                  - name: mermaid
+                    class: mermaid
+                    format: !!python/name:pymdownx.superfences.fence_code_format
+          EOF
+          
+      - name: Build documentation
+        run: mkdocs build
+        
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: ./site
+          
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
