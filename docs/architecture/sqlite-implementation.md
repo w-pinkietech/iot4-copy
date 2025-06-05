@@ -570,125 +570,118 @@ if __name__ == "__main__":
     sys.exit(0 if success else 1)
 ```
 
-## MariaDBからの移行
+## データベースER図
 
-### 移行スクリプト
+### エンティティ関係図
 
-```python
-# scripts/migrate_from_mariadb.py
-#!/usr/bin/env python3
-"""
-MariaDBからSQLiteへの設定データ移行スクリプト
-"""
-
-import sqlite3
-import mysql.connector
-import json
-import sys
-from pathlib import Path
-
-def migrate_from_mariadb(mariadb_config: dict, sqlite_path: str) -> bool:
-    """MariaDBからSQLiteにデータを移行"""
-    
-    try:
-        # MariaDB接続
-        mariadb_conn = mysql.connector.connect(**mariadb_config)
-        mariadb_cursor = mariadb_conn.cursor(dictionary=True)
-        
-        # SQLite接続
-        sqlite_conn = sqlite3.connect(sqlite_path)
-        sqlite_cursor = sqlite_conn.cursor()
-        
-        # センサーデータの移行
-        mariadb_cursor.execute("""
-            SELECT d.device_name as id, d.device_name as name, 
-                   st.sensor_type_text as sensor_type,
-                   sc.unit, sc.offset_range
-            FROM devices d
-            JOIN sensor_types st ON d.sensor_type_id = st.sensor_type_id
-            LEFT JOIN sensor_channels sc ON d.sensor_type_id = sc.sensor_type_id
-            WHERE d.is_save_data = TRUE
-        """)
-        
-        for row in mariadb_cursor.fetchall():
-            sqlite_cursor.execute("""
-                INSERT OR REPLACE INTO sensors 
-                (id, name, sensor_type, unit, config, enabled)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                row['id'],
-                row['name'],
-                row['sensor_type'],
-                row['unit'] or '',
-                json.dumps({"offset_range": row['offset_range'] or 0}),
-                True
-            ))
-        
-        # しきい値データの移行
-        mariadb_cursor.execute("""
-            SELECT s.sensor_id, s.hysteresis_high, s.hysteresis_low,
-                   s.debounce_high, s.debounce_low, s.offset
-            FROM sensors s
-            JOIN devices d ON s.device_id = d.device_id
-        """)
-        
-        for row in mariadb_cursor.fetchall():
-            sqlite_cursor.execute("""
-                INSERT OR REPLACE INTO thresholds 
-                (sensor_id, threshold_high, threshold_low, 
-                 hysteresis_high, hysteresis_low, debounce_high, debounce_low)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                row['sensor_id'],
-                row['hysteresis_high'],
-                row['hysteresis_low'],
-                row['hysteresis_high'],
-                row['hysteresis_low'],
-                row['debounce_high'] or 0.0,
-                row['debounce_low'] or 0.0
-            ))
-            
-            # 較正データも同時に移行
-            sqlite_cursor.execute("""
-                INSERT OR REPLACE INTO calibration 
-                (sensor_id, offset, scale_factor)
-                VALUES (?, ?, ?)
-            """, (
-                row['sensor_id'],
-                row['offset'] or 0.0,
-                1.0
-            ))
-        
-        sqlite_conn.commit()
-        
-        print("✅ Migration completed successfully")
-        print(f"   Migrated to: {sqlite_path}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Migration failed: {e}")
-        return False
-    
-    finally:
-        if 'mariadb_conn' in locals():
-            mariadb_conn.close()
-        if 'sqlite_conn' in locals():
-            sqlite_conn.close()
-
-if __name__ == "__main__":
-    mariadb_config = {
-        'host': 'localhost',
-        'user': 'root',
-        'password': 'password',
-        'database': 'iotkit'
+```mermaid
+erDiagram
+    gateway_info {
+        TEXT id PK "PRIMARY KEY DEFAULT 'gateway'"
+        TEXT gateway_id "NOT NULL"
+        TEXT name "NOT NULL"
+        TEXT location
+        TEXT description
+        TIMESTAMP created_at "DEFAULT CURRENT_TIMESTAMP"
+        TIMESTAMP updated_at "DEFAULT CURRENT_TIMESTAMP"
     }
     
-    sqlite_path = sys.argv[1] if len(sys.argv) > 1 else "gateway_config.db"
+    sensors {
+        TEXT id PK "PRIMARY KEY"
+        TEXT name "NOT NULL"
+        TEXT sensor_type "NOT NULL"
+        TEXT unit "NOT NULL"
+        BOOLEAN enabled "DEFAULT TRUE"
+        JSON config "NOT NULL"
+        TIMESTAMP created_at "DEFAULT CURRENT_TIMESTAMP"
+        TIMESTAMP updated_at "DEFAULT CURRENT_TIMESTAMP"
+    }
     
-    success = migrate_from_mariadb(mariadb_config, sqlite_path)
-    sys.exit(0 if success else 1)
+    thresholds {
+        TEXT sensor_id PK "PRIMARY KEY"
+        REAL threshold_high "NOT NULL"
+        REAL threshold_low "NOT NULL"
+        REAL hysteresis_high "DEFAULT 0.0"
+        REAL hysteresis_low "DEFAULT 0.0"
+        REAL debounce_high "DEFAULT 0.0"
+        REAL debounce_low "DEFAULT 0.0"
+        BOOLEAN enabled "DEFAULT TRUE"
+        TIMESTAMP updated_at "DEFAULT CURRENT_TIMESTAMP"
+    }
+    
+    calibration {
+        TEXT sensor_id PK "PRIMARY KEY"
+        REAL offset "DEFAULT 0.0"
+        REAL scale_factor "DEFAULT 1.0"
+        TIMESTAMP last_calibrated
+        TEXT calibration_notes
+        TIMESTAMP updated_at "DEFAULT CURRENT_TIMESTAMP"
+    }
+    
+    mqtt_config {
+        TEXT id PK "PRIMARY KEY DEFAULT 'mqtt'"
+        TEXT broker_host "NOT NULL DEFAULT 'localhost'"
+        INTEGER broker_port "NOT NULL DEFAULT 1883"
+        TEXT username
+        TEXT password
+        TEXT client_id
+        INTEGER keepalive "DEFAULT 60"
+        INTEGER qos "DEFAULT 1"
+        BOOLEAN retain "DEFAULT FALSE"
+        TIMESTAMP updated_at "DEFAULT CURRENT_TIMESTAMP"
+    }
+    
+    system_config {
+        TEXT key PK "PRIMARY KEY"
+        TEXT value "NOT NULL"
+        TEXT description
+        TIMESTAMP updated_at "DEFAULT CURRENT_TIMESTAMP"
+    }
+    
+    %% Relationships
+    sensors ||--o| thresholds : "sensor_id"
+    sensors ||--o| calibration : "sensor_id"
 ```
+
+### テーブル詳細説明
+
+#### gateway_info
+ゲートウェイの基本情報を格納。通常は1レコードのみ。
+- **gateway_id**: ユニークなゲートウェイ識別子
+- **name**: 表示用の名前
+- **location**: 設置場所
+- **description**: 説明文
+
+#### sensors  
+接続されているセンサーの定義情報。
+- **id**: センサーID（プライマリキー）
+- **sensor_type**: temperature, pressure, distance等
+- **unit**: 単位（℃、Pa、mm等）
+- **config**: センサー固有設定（JSON形式）
+
+#### thresholds
+各センサーのしきい値設定。
+- **threshold_high/low**: 上限・下限値
+- **hysteresis_high/low**: ヒステリシス設定
+- **debounce_high/low**: デバウンス時間
+
+#### calibration
+センサーの較正情報。
+- **offset**: オフセット値
+- **scale_factor**: スケールファクター
+- **last_calibrated**: 最終較正日時
+
+#### mqtt_config
+MQTT通信設定。通常は1レコードのみ。
+- **broker_host/port**: MQTTブローカー接続先
+- **client_id**: クライアント識別子
+- **qos**: Quality of Service設定
+
+#### system_config
+システム全体の設定項目。キー・バリュー形式。
+- **key**: 設定項目名
+- **value**: 設定値（文字列）
+- **description**: 設定の説明
 
 ## パフォーマンス比較
 
