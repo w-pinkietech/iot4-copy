@@ -9,9 +9,9 @@
 ## 目次
 1. [現状システムの問題点（図解）](#現状システムの問題点図解)
 2. [疎結合化の全体戦略（図解）](#疎結合化の全体戦略図解)
-3. [Gatewayによる解決アプローチ](#gatewayによる解決アプローチ)
+3. [プラグインアーキテクチャによる解決](#プラグインアーキテクチャによる解決)
 4. [データフロー変化の比較](#データフロー変化の比較)
-5. [段階的移行戦略](#段階的移行戦略)
+5. [新ハードウェア追加時の比較](#新ハードウェア追加時の比較)
 
 ## 現状システムの問題点（図解）
 
@@ -145,11 +145,11 @@ graph TB
         
         subgraph "Universal Gateway（ハードウェア非依存）"
             GW[Gateway Core<br/>🌟 新規実装<br/>MQTT Subscribe]
-            subgraph "Protocol Adapters（プロトコル固有処理）"
-                PA1[BravePI Protocol Adapter<br/>バイナリフレーム解析<br/>メッセージタイプ処理]
-                PA2[BraveJIG Protocol Adapter<br/>JIG専用センサー対応<br/>高精度データ処理]
-                PA3[Standard JSON Adapter<br/>JSON正規化]
-                PA4[Legacy Protocol Adapter<br/>既存フォーマット対応]
+            subgraph "🔌 Protocol Adapter Plugins（プラグイン式）"
+                PA1[BravePI Protocol Plugin<br/>🔌 動的ロード可能<br/>バイナリフレーム解析]
+                PA2[BraveJIG Protocol Plugin<br/>🔌 動的ロード可能<br/>JIG専用センサー対応]
+                PA3[Standard JSON Plugin<br/>🔌 動的ロード可能<br/>JSON正規化]
+                PA4[Legacy Protocol Plugin<br/>🔌 動的ロード可能<br/>既存フォーマット対応]
             end
         end
         
@@ -231,10 +231,10 @@ graph LR
         B3[実機テスト必須<br/>効率低下]
     end
     
-    subgraph "After：疎結合"
+    subgraph "After：疎結合（プラグイン式）"
         A1[新ハードウェア対応<br/>1-2週間]
-        A2[プラグイン追加のみ<br/>低リスク]
-        A3[モック・シミュレート<br/>高効率]
+        A2[🔌 Protocol Plugin追加のみ<br/>低リスク・既存システム無影響]
+        A3[モック・シミュレート<br/>高効率・テスト容易]
     end
     
     B1 -.->|90%短縮| A1
@@ -249,7 +249,7 @@ graph LR
     style B3 fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
 ```
 
-## Gatewayによる解決アプローチ
+## プラグインアーキテクチャによる解決
 
 ### 1. 開発対象の2層構成
 
@@ -284,11 +284,11 @@ graph TB
             SUB[MQTT Client<br/>全センサートピック購読<br/>リアルタイム受信]
         end
         
-        subgraph "Protocol Adapters（プロトコル固有処理）"
-            PA1[BravePI Protocol Adapter<br/>バイナリフレーム解析→統一JSON<br/>メッセージタイプ処理]
-            PA2[BraveJIG Protocol Adapter<br/>JIG固有センサー処理→統一JSON<br/>高精度データ処理]
-            PA3[Standard JSON Adapter<br/>JSON正規化・検証]
-            PA4[Legacy Protocol Adapter<br/>既存フォーマット対応]
+        subgraph "🔌 Protocol Adapter Plugins（プラグイン式）"
+            PA1[BravePI Protocol Plugin<br/>🔌 .py ファイル動的ロード<br/>バイナリフレーム解析→統一JSON]
+            PA2[BraveJIG Protocol Plugin<br/>🔌 .py ファイル動的ロード<br/>JIG固有センサー処理→統一JSON]
+            PA3[Standard JSON Plugin<br/>🔌 .py ファイル動的ロード<br/>JSON正規化・検証]
+            PA4[Legacy Protocol Plugin<br/>🔌 .py ファイル動的ロード<br/>既存フォーマット対応]
         end
         
         subgraph "Universal API"
@@ -338,17 +338,20 @@ graph TB
 ⚠️ **汎用通信層の特徴**: Driver Libraryは通信制御のみを担当し、**プロトコル解析は一切行いません**。
 BravePI/JIG固有の処理は全てGateway側のProtocol Adapterで実装します。
 
-#### 開発対象2：Universal Gateway Protocol Adapter仕様
+#### 開発対象2：Universal Gateway Protocol Plugin仕様（🔌 プラグイン式）
 
-| Protocol Adapter | ファイル | 機能 | Raw MQTT入力 | 統一JSON出力 |
-|------------------|----------|------|-------------|-------------|
-| **BravePI Protocol Adapter** | `bravepi_protocol_adapter.py` | バイナリフレーム解析<br/>メッセージタイプ処理<br/>16センサータイプ対応 | Raw MQTT Topic<br/>`raw/uart/data` | 統一JSON<br/>BravePI固有処理済み |
-| **BraveJIG Protocol Adapter** | `bravejig_protocol_adapter.py` | JIG専用センサー処理<br/>高精度データ処理<br/>JIG拡張センサー対応 | Raw MQTT Topic<br/>`raw/usb_serial/data` | 統一JSON<br/>BraveJIG固有処理済み |
-| **Standard JSON Adapter** | `json_adapter.py` | JSON正規化・検証<br/>フィールド統一 | Raw MQTT Topic<br/>`raw/json/data` | 統一JSON<br/>正規化済み |
-| **Legacy Protocol Adapter** | `legacy_adapter.py` | 既存フォーマット対応<br/>後方互換性 | Raw MQTT Topic<br/>`raw/legacy/data` | 統一JSON<br/>互換性確保 |
+| Protocol Plugin | プラグインファイル | 機能 | Raw MQTT入力 | 統一JSON出力 | 動的ロード |
+|------------------|----------|------|-------------|-------------|------------|
+| **🔌 BravePI Protocol Plugin** | `plugins/bravepi_protocol_plugin.py` | バイナリフレーム解析<br/>メッセージタイプ処理<br/>16センサータイプ対応 | Raw MQTT Topic<br/>`raw/uart/data` | 統一JSON<br/>BravePI固有処理済み | ✅ 実行時追加・削除可能 |
+| **🔌 BraveJIG Protocol Plugin** | `plugins/bravejig_protocol_plugin.py` | JIG専用センサー処理<br/>高精度データ処理<br/>JIG拡張センサー対応 | Raw MQTT Topic<br/>`raw/usb_serial/data` | 統一JSON<br/>BraveJIG固有処理済み | ✅ 実行時追加・削除可能 |
+| **🔌 Standard JSON Plugin** | `plugins/json_plugin.py` | JSON正規化・検証<br/>フィールド統一 | Raw MQTT Topic<br/>`raw/json/data` | 統一JSON<br/>正規化済み | ✅ 実行時追加・削除可能 |
+| **🔌 Legacy Protocol Plugin** | `plugins/legacy_plugin.py` | 既存フォーマット対応<br/>後方互換性 | Raw MQTT Topic<br/>`raw/legacy/data` | 統一JSON<br/>互換性確保 | ✅ 実行時追加・削除可能 |
 
-⚠️ **Protocol Adapterの特徴**: ハードウェア固有のプロトコル解析・データ変換を全て担当します。
-Driver Libraryからの生データを受け取り、統一JSON形式に変換して出力します。
+🔌 **Protocol Pluginの特徴**: 
+- **動的ロード**: サーバー再起動なしで新プラグイン追加・削除可能
+- **独立性**: プラグイン間の依存関係なし、個別開発・テスト可能
+- **統一インターフェース**: 全プラグインが同一の入出力仕様に従う
+- **専門責任**: ハードウェア固有のプロトコル解析・データ変換のみを担当
 
 #### 新規ハードウェア対応手順
 
@@ -365,10 +368,10 @@ graph LR
         STEP4[Raw MQTT Publisher<br/>Topic: raw/ethernet/data]
     end
     
-    subgraph "Protocol Adapter開発"
-        STEP5[Protocol Adapter追加<br/>siemens_protocol_adapter.py]
+    subgraph "🔌 Protocol Plugin開発"
+        STEP5[Protocol Plugin追加<br/>🔌 plugins/siemens_protocol_plugin.py]
         STEP6[S7プロトコル解析実装<br/>PLC→統一JSON変換]
-        STEP7[Raw MQTT Subscribe設定<br/>raw/ethernet/data購読]
+        STEP7[プラグインマニフェスト作成<br/>plugin.yaml設定・動的ロード]
     end
     
     subgraph "統合・テスト"
@@ -391,26 +394,27 @@ graph LR
     style STEP9 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
-**新規ハードウェア対応手順**:
+**🔌 新規ハードウェア対応手順**:
 1. **汎用通信Driver作成** (ethernet_driver.py) - ベアメタル環境用
 2. **物理制御実装** (Ethernet通信のみ) - 通信制御のみ
 3. **Rawデータ配信** (プロトコル解析なし) - 生データ転送のみ
 4. **Raw MQTT Publisher** (raw/ethernet/data) - 生データ配信
-5. **Protocol Adapter追加** (siemens_protocol_adapter.py) - Gateway側
+5. **🔌 Protocol Plugin追加** (plugins/siemens_protocol_plugin.py) - プラグイン式
 6. **S7プロトコル解析実装** (PLC→統一JSON変換) - ハードウェア固有処理
-7. **Raw MQTT Subscribe設定** (raw/ethernet/data購読) - Gateway設定
-8. **E2Eテスト** (実機→Raw MQTT→Gateway) - 統合動作確認
-9. **本番配備** (工場ライン投入) - 運用開始
+7. **プラグインマニフェスト作成** (plugin.yaml設定・動的ロード) - プラグイン管理
+8. **E2Eテスト** (実機→Raw MQTT→Gateway→Plugin) - 統合動作確認
+9. **本番配備** (🔌 ホットプラグイン追加) - サーバー無停止で運用開始
 
 **開発期間**: 
 - **汎用通信Driver**: **3-4日** (通信制御のみ、プロトコル解析なし)
-- **Protocol Adapter**: **1週間** (ハードウェア固有のプロトコル処理)
+- **🔌 Protocol Plugin**: **1週間** (ハードウェア固有のプロトコル処理)
 - **総計 1-2週間** で完成（従来の3-6ヶ月から大幅短縮）
 
-**🎯 設計の利点**: 
+**🔌 プラグインアーキテクチャの利点**: 
+- **動的ロード**: サーバー再起動なしで新機能追加
 - **汎用Driver**: 他のEthernet機器でも流用可能
-- **Protocol Adapter**: ハードウェア固有知識を集約
-- **完全分離**: 通信層とプロトコル層の責務が明確
+- **Protocol Plugin**: ハードウェア固有知識を集約・独立開発
+- **完全分離**: 通信層とプロトコル層の責務が明確・テスト容易
 
 ### 2. Universal Gateway 出力仕様（工場・現場向け）
 
@@ -561,10 +565,10 @@ sequenceDiagram
     Database->>App: 統一API経由<br/>データ取得
     App->>App: ハードウェア非依存<br/>処理・表示
     
-    Note over Multiple,App: 利点：新ハードウェアはGatewayプラグインのみ追加
+    Note over Multiple,App: 利点：新ハードウェアは🔌 Protocol Pluginのみ追加
 ```
 
-### 3. 新ハードウェア追加時の比較
+## 新ハードウェア追加時の比較
 
 ```mermaid
 graph TB
@@ -581,16 +585,73 @@ graph TB
         MODIFY4 --> IMPACT
     end
     
-    subgraph "目標：ESP32追加時の影響範囲"
+    subgraph "目標：ESP32追加時の影響範囲（🔌 プラグイン式）"
         ESP32_NEW[ESP32デバイス]
-        ESP32_NEW --> PLUGIN[ESP32プラグイン実装のみ<br/>1-2週間]
-        PLUGIN --> NOIMACT[既存システム無影響<br/>即座に利用可能]
+        ESP32_NEW --> PLUGIN[🔌 ESP32 Protocol Plugin実装のみ<br/>plugins/esp32_protocol_plugin.py<br/>1-2週間・動的ロード]
+        PLUGIN --> NOIMACT[既存システム無影響<br/>サーバー無停止で即座に利用可能]
     end
     
     style IMPACT fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
     style NOIMACT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
     style PLUGIN fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
 ```
+
+### プラグインアーキテクチャの核心価値
+
+```mermaid
+graph LR
+    subgraph "🔌 プラグインシステムの特徴"
+        A[動的ロード<br/>サーバー再起動不要]
+        B[独立開発<br/>プラグイン間依存なし]
+        C[統一インターフェース<br/>Raw MQTT → 統一JSON]
+        D[ホットプラグイン<br/>運用中に追加・削除]
+    end
+    
+    subgraph "従来システムとの比較"
+        E[従来：全システム修正<br/>3-6ヶ月・高リスク]
+        F[プラグイン：単一ファイル追加<br/>1-2週間・低リスク]
+    end
+    
+    A --> F
+    B --> F
+    C --> F
+    D --> F
+    
+    style A fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style B fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style C fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style D fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style F fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style E fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+```
+
+**🔌 プラグインアーキテクチャの実装方針**:
+
+1. **プラグインディレクトリ構造**:
+   ```
+   plugins/
+   ├── bravepi_protocol_plugin.py
+   ├── bravejig_protocol_plugin.py
+   ├── esp32_protocol_plugin.py
+   └── siemens_s7_protocol_plugin.py
+   ```
+
+2. **統一プラグインインターフェース**:
+   ```python
+   class ProtocolPlugin:
+       def process(self, raw_mqtt_data: bytes) -> dict:
+           """Raw MQTT → 統一JSON変換"""
+           pass
+       
+       def get_plugin_info(self) -> dict:
+           """プラグイン情報取得"""
+           pass
+   ```
+
+3. **動的ロード機構**:
+   - **追加**: `plugins/` ディレクトリにファイル配置で自動認識
+   - **削除**: ファイル削除で自動アンロード
+   - **更新**: ファイル更新で自動リロード
 
 
 ---
