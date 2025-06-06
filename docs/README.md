@@ -2,199 +2,118 @@
 
 ## 概要
 
-このディレクトリには、IoT導入支援キット Ver.4.1の包括的なドキュメントが含まれています。体系的に整理された情報により、システムの理解、開発、運用、移行を効率的に行うことができます。
+本ドキュメントは、Node-REDベースの現行IoTシステムから、Python/FastAPIベースの新システムへの移行プロジェクトに関する包括的なドキュメントセットです。
 
-## ドキュメント構成
+## ドキュメント構造
 
-### 📁 [architecture/](./architecture/) - システムアーキテクチャ
-システム全体の設計思想と構造に関するドキュメント
+### 🔧 [現行システム](current-system/)
+Node-RED + BravePI/JIG + MariaDB/InfluxDBで構成される現在のシステム
 
-| ファイル | 説明 | 対象読者 |
-|---------|------|----------|
-| [overview.md](./architecture/overview.md) | システム全体概要 | 全員 |
-| [hardware-interfaces.md](./architecture/hardware-interfaces.md) | ハードウェアインターフェース | 開発者・運用者 |
-| [data-flow.md](./architecture/data-flow.md) | データフロー詳細 | アーキテクト・開発者 |
-| [database-design.md](./architecture/database-design.md) | データベース設計 | 開発者・DBA |
+- **[アーキテクチャ](current-system/architecture/)**: システム全体設計、BravePI/JIG統合詳細
+- **[技術分析](current-system/analysis/)**: 性能分析、課題分析
+- **[API仕様](current-system/api/)**: 既存エンドポイント仕様
 
-### 📁 [technical/](./technical/) - 技術仕様
-具体的な技術実装と仕様書
+### 🚀 [新システム](new-system/)
+Python/FastAPI + Streamlit + Grafanaで構成される新しいシステム
 
-| ファイル | 説明 | 対象読者 |
-|---------|------|----------|
-| [node-red-flows.md](./technical/node-red-flows.md) | Node-REDフロー詳細仕様 | 開発者 |
-| [sensor-specifications.md](./technical/sensor-specifications.md) | センサー技術仕様 | 開発者・技術者 |
-| [api-reference.md](./technical/api-reference.md) | API リファレンス | 開発者・外部連携 |
-| [communication-protocols.md](./technical/communication-protocols.md) | 通信プロトコル仕様 | 開発者・ネットワーク管理者 |
+- **[アーキテクチャ](new-system/architecture/)**: 3層分散アーキテクチャ設計
+- **[実装詳細](new-system/implementation/)**: SQLite設計、MQTT仕様、セキュリティ
+- **[API仕様](new-system/api/)**: REST API、メッセージフォーマット
 
-### 📁 [migration/](./migration/) - システム移行
-Node-REDから他アーキテクチャへの移行ガイド
+### 🔄 [移行計画](migration/)
+現行システムから新システムへの移行戦略
 
-| ファイル | 説明 | 対象読者 |
-|---------|------|----------|
-| [overview.md](./migration/overview.md) | 移行戦略概要 | プロジェクトマネージャー・アーキテクト |
-| [analysis-procedures.md](./migration/analysis-procedures.md) | 事前分析手順 | アーキテクト・開発者 |
-| [architecture-alternatives.md](./migration/architecture-alternatives.md) | 代替アーキテクチャ選択肢 | アーキテクト・意思決定者 |
-| [step-by-step-guide.md](./migration/step-by-step-guide.md) | 段階的移行手順 | 開発者・運用者 |
-| [risk-management.md](./migration/risk-management.md) | リスク管理 | プロジェクトマネージャー |
+- **[戦略](migration/strategy/)**: 移行方針、フェーズ計画、リスク評価
+- **[手順](migration/procedures/)**: データ移行、テスト、デプロイメント
+- **[検証](migration/validation/)**: 互換性テスト、性能検証
 
-### 📁 [guides/](./guides/) - 運用・開発ガイド
-日常的な運用と開発に必要な手順書
+### ⚙️ [運用](operations/)
+システムの構築、運用、保守に関するドキュメント
 
-| ファイル | 説明 | 対象読者 |
-|---------|------|----------|
-| [installation.md](./guides/installation.md) | インストール・セットアップ | 運用者・管理者 |
-| [operation.md](./guides/operation.md) | 日常運用手順 | 運用者 |
-| [troubleshooting.md](./guides/troubleshooting.md) | トラブルシューティング | 運用者・サポート |
-| [development.md](./guides/development.md) | 開発者向けガイド | 開発者 |
-| [testing.md](./guides/testing.md) | テスト手順 | QA・開発者 |
+- **[インストール](operations/installation/)**: システム要件、構築手順
+- **[保守](operations/maintenance/)**: 監視、バックアップ、トラブルシューティング
+- **[セキュリティ](operations/security/)**: アクセス制御、セキュリティ手順
 
-### 📁 [api/](./api/) - API ドキュメント
-外部連携用API仕様
+### 📋 [設計プロセス](design/)
+設計検討プロセスと意思決定の記録
 
-| ファイル | 説明 | 対象読者 |
-|---------|------|----------|
-| [rest-api.md](./api/rest-api.md) | REST API 仕様 | 開発者・外部連携 |
-| [mqtt-topics.md](./api/mqtt-topics.md) | MQTT トピック仕様 | 開発者・IoT技術者 |
-| [websocket.md](./api/websocket.md) | WebSocket API | フロントエンド開発者 |
-| [examples/](./api/examples/) | API使用例 | 開発者 |
+- **[レビュー](design/reviews/)**: 設計レビューチェックリスト、決定記録
+- **[研究](design/research/)**: 技術評価、代替案分析
+- **[プロトタイプ](design/prototypes/)**: PoC結果
 
-### 📁 [assets/](./assets/) - リソース
-図表・画像などの共有リソース
+### 📚 [リファレンス](reference/)
+技術仕様、用語集などの参考資料
 
-```
-assets/
-├── images/          # スクリーンショット・写真
-├── diagrams/        # システム図・フローチャート  
-└── templates/       # ドキュメントテンプレート
-```
+- **[ハードウェア](reference/hardware/)**: BravePI/JIG仕様、センサーカタログ
+- **[ソフトウェア](reference/software/)**: 依存関係、設定リファレンス
+- **[用語集](reference/glossary.md)**: 専門用語の定義
 
-## ドキュメント管理方針
+## クイックスタート
 
-### 🎯 目的別ナビゲーション
+### 現行システムを理解したい方
+1. [現行システム概要](current-system/README.md)
+2. [BravePI/JIG統合アーキテクチャ](current-system/architecture/bravepi-bravejig-integration.md)
+3. [技術分析](current-system/analysis/technical-analysis.md)
 
-#### 新規参画者向け
-1. [overview.md](./architecture/overview.md) - システム全体理解
-2. [installation.md](./guides/installation.md) - 環境構築
-3. [development.md](./guides/development.md) - 開発環境準備
+### 新システム設計を確認したい方
+1. [新システム概要](new-system/README.md)
+2. [アーキテクチャ概要](new-system/architecture/overview.md)
+3. [センサードライバー設計](new-system/architecture/sensor-drivers.md)
 
-#### システム移行検討者向け
-1. [migration/overview.md](./migration/overview.md) - 移行戦略
-2. [architecture-alternatives.md](./migration/architecture-alternatives.md) - 選択肢検討
-3. [analysis-procedures.md](./migration/analysis-procedures.md) - 分析手順
+### 移行を計画・実行したい方
+1. [移行戦略](migration/strategy/overview.md)
+2. [移行手順](migration/procedures/data-migration.md)
+3. [設計レビューチェックリスト](design/reviews/design-review-checklist.md)
 
-#### 運用管理者向け
-1. [operation.md](./guides/operation.md) - 日常運用
-2. [troubleshooting.md](./guides/troubleshooting.md) - 問題対応
-3. [api/rest-api.md](./api/rest-api.md) - API監視
+### システムを構築・運用したい方
+1. [システム要件](operations/installation/requirements.md)
+2. [構築手順](operations/installation/edge-gateway-setup.md)
+3. [運用ガイド](operations/maintenance/monitoring.md)
 
-#### 開発者向け
-1. [technical/node-red-flows.md](./technical/node-red-flows.md) - 実装詳細
-2. [development.md](./guides/development.md) - 開発ガイド
-3. [testing.md](./guides/testing.md) - テスト手順
+## プロジェクト状況
 
-### 📝 ドキュメント作成・更新ルール
+### 完了済み ✅
+- 現行システムの技術分析
+- 新システムアーキテクチャ設計
+- センサードライバー設計
+- SQLite実装設計
+- 設計レビューチェックリスト作成
+- BravePI/JIG統合アーキテクチャ分析
 
-#### 作成原則
-- **読者中心**: 対象読者を明確にし、そのレベルに合わせた内容
-- **実用性重視**: 具体的な手順・コード例を含める
-- **最新性保持**: システム変更時の同期更新
-- **検索性向上**: 適切なタグ・リンク・索引の整備
+### 進行中 🔄
+- ドキュメント体系の再構築
+- 移行戦略の策定
+- 複雑処理（FFT解析等）の移行方法検討
 
-#### ファイル命名規則
-```
-[カテゴリ]/[機能名].md
-例: technical/sensor-specifications.md
-    migration/risk-management.md
-    guides/troubleshooting.md
-```
+### 今後の予定 📅
+- 実装フェーズの開始
+- パイロット運用
+- 段階的移行の実行
 
-#### 文書構造テンプレート
-```markdown
-# タイトル
+## ドキュメント再構築について
 
-## 概要
-- 目的・対象読者・前提条件
+このプロジェクトでは、ドキュメントの整理と再構築を実施しています：
 
-## 目次
-- セクション一覧
+- **目的別整理**: 現状分析、新設計、移行、運用を明確に分離
+- **読み手別対応**: 開発者、運用者、マネージャー向けに最適化
+- **ナビゲーション改善**: 階層的な構造で情報アクセスを改善
 
-## 本文
-- 具体的内容
+詳細は[再構築計画](REORGANIZATION_PLAN.md)をご覧ください。
 
-## 関連資料
-- 参考リンク・関連文書
+## 貢献
 
-## 更新履歴
-- 変更記録
-```
+このドキュメントの改善提案や追加情報があれば、以下の方法で貢献できます：
 
-### 🔄 メンテナンス体制
+1. **Issue作成**: 不明点や改善提案をGitHub Issueで報告
+2. **Pull Request**: ドキュメントの修正・追加
+3. **レビュー参加**: 設計レビューへの参加
 
-#### 更新責任
-| ドキュメントカテゴリ | 主担当 | 更新頻度 |
-|---------------------|--------|----------|
-| architecture/ | システムアーキテクト | システム設計変更時 |
-| technical/ | 開発チーム | 機能追加・変更時 |
-| migration/ | プロジェクトマネージャー | 移行戦略見直し時 |
-| guides/ | 運用チーム | 手順変更時 |
-| api/ | API開発者 | API変更時 |
+## ライセンス
 
-#### レビュープロセス
-1. **作成者**: ドキュメント初版作成
-2. **レビュアー**: 内容・品質確認
-3. **承認者**: 最終承認・公開許可
+Copyright (c) 2023 Fukuoka Industrial Technology Center
 
-#### バージョン管理
-- Git による変更履歴管理
-- セマンティックバージョニング適用
-- ブランチ戦略: `docs/feature-name` → `main`
+Licensed under the Apache License, Version 2.0
 
-### 🔍 検索・ナビゲーション
+## 連絡先
 
-#### クロスリファレンス
-各ドキュメントは関連する他の文書への適切なリンクを含む
-
-#### タグシステム
-```yaml
-tags:
-  - system-level: [architecture, infrastructure, security]
-  - user-level: [operation, troubleshooting, api-usage]  
-  - developer-level: [implementation, testing, migration]
-  - domain: [sensor, database, networking, ui]
-```
-
-#### 検索支援
-- 各ドキュメントに適切なメタデータ付与
-- 主要概念の索引ページ提供
-- 略語・用語集の整備
-
-## 貢献ガイドライン
-
-### ドキュメント追加・更新手順
-1. **Issue作成**: 変更内容・理由を明記
-2. **ブランチ作成**: `docs/[機能名]` で作業ブランチ作成
-3. **ドキュメント作成・更新**: テンプレートに従って作成
-4. **レビュー依頼**: プルリクエスト作成
-5. **マージ**: 承認後にメインブランチにマージ
-
-### 品質基準
-- **正確性**: 技術的内容の正確性確保
-- **完全性**: 必要な情報の網羅
-- **明確性**: 読みやすい文章・構造
-- **一貫性**: 用語・スタイルの統一
-
-## サポート・フィードバック
-
-### 問い合わせ
-- ドキュメントに関する質問・改善提案
-- 新規ドキュメント要求
-- 技術的サポート
-
-### 連絡先
-- Issue tracker: [GitHub Issues](../../issues)
-- 内部チャット: Slack #iot-documentation
-- メール: iot-support@example.com
-
----
-
-> 📚 **継続的改善**: このドキュメント体系は、プロジェクトの進化と共に継続的に改善されます。フィードバックと提案をお待ちしています。
+プロジェクトに関する質問は、GitHubのIssueまたはディスカッションをご利用ください。
