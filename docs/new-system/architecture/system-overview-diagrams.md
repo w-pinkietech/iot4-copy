@@ -232,11 +232,11 @@ graph TB
         end
         
         subgraph "Protocol Parsers"
-            P1[Binary Parser<br/>struct.unpack()]
-            P2[JSON Parser<br/>json.loads()]
-            P3[ASCII Parser<br/>str.decode()]
-            P4[I2C Parser<br/>smbus2]
-            P5[Modbus Parser<br/>pymodbus]
+            P1[Binary Parser<br/>struct.unpack関数]
+            P2[JSON Parser<br/>json.loads関数]
+            P3[ASCII Parser<br/>str.decode関数]
+            P4[I2C Parser<br/>smbus2ライブラリ]
+            P5[Modbus Parser<br/>pymodbusライブラリ]
         end
         
         subgraph "Universal Converter"
