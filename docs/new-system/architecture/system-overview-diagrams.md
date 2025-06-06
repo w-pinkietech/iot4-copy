@@ -66,13 +66,13 @@ graph TB
     MYSQL --> INFLUX
     INFLUX --> WEB
     
-    style F1 fill:#ffcccc
-    style F2 fill:#ffcccc
-    style F3 fill:#ffcccc
-    style F53 fill:#ffcccc
-    style H1 fill:#ffdddd
-    style H2 fill:#ffdddd
-    style H380 fill:#ffdddd
+    style F1 fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style F2 fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style F3 fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style F53 fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style H1 fill:#ff8787,stroke:#fff,stroke-width:2px,color:#fff
+    style H2 fill:#ff8787,stroke:#fff,stroke-width:2px,color:#fff
+    style H380 fill:#ff8787,stroke:#fff,stroke-width:2px,color:#fff
 ```
 
 ### 2. 密結合による具体的問題
@@ -101,12 +101,12 @@ graph LR
         L --> M[デバッグ複雑化]
     end
     
-    style B fill:#ff9999
-    style F fill:#ff9999
-    style G fill:#ff9999
-    style H fill:#ff9999
-    style I fill:#ff9999
-    style K fill:#ff9999
+    style B fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style F fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style G fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style H fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style I fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style K fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
 ```
 
 ## 疎結合化の全体戦略（図解）
@@ -170,12 +170,12 @@ graph TB
     APP --> DB
     DB --> UI
     
-    style GW fill:#90EE90
-    style API fill:#90EE90
-    style APP fill:#90EE90
-    style PA1 fill:#FFE4B5
-    style PA2 fill:#FFE4B5
-    style PA3 fill:#FFE4B5
+    style GW fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style API fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style APP fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style PA1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style PA2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style PA3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
 ```
 
 ### 2. 疎結合化による効果
@@ -198,12 +198,12 @@ graph LR
     B2 -.->|リスク最小化| A2
     B3 -.->|5倍効率化| A3
     
-    style A1 fill:#90EE90
-    style A2 fill:#90EE90
-    style A3 fill:#90EE90
-    style B1 fill:#ffcccc
-    style B2 fill:#ffcccc
-    style B3 fill:#ffcccc
+    style A1 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style A2 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style A3 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style B1 fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style B2 fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style B3 fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
 ```
 
 ## Gatewayによる解決アプローチ
@@ -253,9 +253,9 @@ graph LR
     T --> V
     V --> OUTPUT
     
-    style T fill:#FFD700
-    style V fill:#FFD700
-    style OUTPUT fill:#90EE90
+    style T fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style V fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style OUTPUT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
 ### 2. BravePI専用プロトコル変換の詳細
@@ -263,7 +263,7 @@ graph LR
 ```mermaid
 graph TB
     subgraph "BravePI バイナリフレーム"
-        FRAME[Protocol|Type|Length|Timestamp|Device#|Sensor|Payload<br/>1byte|1byte|2bytes|4bytes|8bytes|2bytes|n bytes]
+        FRAME["Protocol・Type・Length・Timestamp・Device#・Sensor・Payload<br/>1byte・1byte・2bytes・4bytes・8bytes・2bytes・n bytes"]
     end
     
     subgraph "Gateway 解析処理"
@@ -283,9 +283,9 @@ graph TB
     EXTRACT --> CALIB
     CALIB --> JSON
     
-    style PARSE fill:#FFE4B5
-    style MAP fill:#FFE4B5
-    style JSON fill:#90EE90
+    style PARSE fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style MAP fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style JSON fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
 ## データフロー変化の比較
@@ -353,9 +353,9 @@ graph TB
         PLUGIN --> NOIMACT[既存システム無影響<br/>即座に利用可能]
     end
     
-    style IMPACT fill:#ffcccc
-    style NOIMACT fill:#90EE90
-    style PLUGIN fill:#FFE4B5
+    style IMPACT fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style NOIMACT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style PLUGIN fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
 ```
 
 ## 段階的移行戦略
@@ -412,9 +412,9 @@ graph TB
     W4 --> W5 --> W6 --> W7 --> W8
     W8 --> W9 --> W10 --> W11 --> W12
     
-    style W4 fill:#FFE4B5
-    style W8 fill:#FFE4B5
-    style W12 fill:#90EE90
+    style W4 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style W8 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style W12 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
 ### 3. Phase 2: 並行運用アーキテクチャ
@@ -456,9 +456,9 @@ graph TB
     OLD_DB --> VALIDATOR
     NEW_DB --> VALIDATOR
     
-    style NEW_GW fill:#90EE90
-    style VALIDATOR fill:#FFD700
-    style SPLIT fill:#FFE4B5
+    style NEW_GW fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style VALIDATOR fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style SPLIT fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
 ```
 
 ## 実装優先度とROI
@@ -485,12 +485,12 @@ graph TB
         LOW3[セキュリティ強化<br/>📊 ROI: 長期運用安定性]
     end
     
-    style HIGH1 fill:#90EE90
-    style HIGH2 fill:#90EE90
-    style HIGH3 fill:#90EE90
-    style MID1 fill:#FFE4B5
-    style MID2 fill:#FFE4B5
-    style MID3 fill:#FFE4B5
+    style HIGH1 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style HIGH2 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style HIGH3 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style MID1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style MID2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style MID3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
 ```
 
 ### 2. 段階的ROI実現
@@ -515,10 +515,10 @@ graph LR
     
     M1 --> M2 --> M3 --> M4
     
-    style M1 fill:#FFE4B5
-    style M2 fill:#90EE90
-    style M3 fill:#90EE90
-    style M4 fill:#90EE90
+    style M1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style M2 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style M3 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style M4 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
 ---
