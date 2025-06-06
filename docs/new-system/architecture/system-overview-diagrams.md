@@ -118,21 +118,31 @@ graph TB
 ```mermaid
 graph TB
     subgraph "目標：疎結合システム"
-        subgraph "多様なハードウェア層"
-            BPI[BravePI<br/>UART /dev/ttyAMA0<br/>38400ボー<br/>バイナリフレーム]
-            BJG[BraveJIG<br/>USB Serial /dev/ttyACM0-9<br/>38400ボー<br/>バイナリフレーム]
-            ESP[ESP32<br/>WiFi TCP/HTTP<br/>JSON通信]
-            ARD[Arduino<br/>USB Serial<br/>ASCII/JSON]
-            OTH[その他IoTデバイス<br/>MQTT/Modbus<br/>標準プロトコル]
+        subgraph "ハードウェア環境層（ベアメタル）"
+            subgraph "BravePI/JIG環境"
+                BPI[BravePI<br/>UART /dev/ttyAMA0<br/>38400ボー・バイナリフレーム]
+                BJG[BraveJIG<br/>USB Serial /dev/ttyACM0-9<br/>38400ボー・バイナリフレーム]
+                DRV1[Driver Library<br/>bravepi_driver.py<br/>物理制御→MQTT変換]
+            end
+            
+            subgraph "その他ハードウェア環境"
+                ESP[ESP32<br/>内蔵WiFi・MQTT Client]
+                ARD[Arduino<br/>WiFi Shield・MQTT]
+                I2C[I2C Sensors<br/>Raspberry Pi・Bridge]
+                DRV2[Driver Library<br/>i2c_driver.py<br/>物理制御→MQTT変換]
+            end
         end
         
-        subgraph "Gateway抽象化層"
-            GW[Universal Gateway<br/>🌟 新規実装<br/>統一JSON出力]
+        subgraph "ネットワーク通信層"
+            MQTT[MQTT Broker<br/>Eclipse Mosquitto<br/>Topic: sensors/device/type]
+        end
+        
+        subgraph "Universal Gateway（ハードウェア非依存）"
+            GW[Gateway Core<br/>🌟 新規実装<br/>MQTT Subscribe]
             subgraph "Protocol Adapters"
-                PA1[BravePI Adapter<br/>UART → JSON<br/>プロトコル解析]
-                PA2[BraveJIG Adapter<br/>USB Serial → JSON<br/>プロトコル解析]
-                PA3[ESP32 Adapter<br/>WiFi HTTP → JSON]
-                PA4[MQTT Adapter<br/>MQTT → JSON]
+                PA1[BravePI Protocol Adapter<br/>バイナリフレーム解析]
+                PA2[Standard JSON Adapter<br/>JSON正規化]
+                PA3[Legacy Protocol Adapter<br/>既存フォーマット対応]
             end
         end
         
@@ -154,33 +164,41 @@ graph TB
         end
     end
     
-    BPI -.->|UART 38400ボー| PA1
-    BJG -.->|USB Serial 38400ボー| PA2
-    ESP -.->|WiFi HTTP| PA3
-    ARD -.->|USB Serial| PA3
-    OTH -.->|MQTT/TCP| PA4
+    BPI --> DRV1
+    BJG --> DRV1
+    I2C --> DRV2
     
-    PA1 -.->|JSON| GW
-    PA2 -.->|JSON| GW
-    PA3 -.->|JSON| GW
-    PA4 -.->|JSON| GW
+    DRV1 -.->|MQTT Publish| MQTT
+    DRV2 -.->|MQTT Publish| MQTT
+    ESP -.->|MQTT Publish| MQTT
+    ARD -.->|MQTT Publish| MQTT
     
-    GW -.->|HTTP| API
-    GW -.->|WebSocket| WS
+    MQTT -.->|MQTT Subscribe| GW
     
-    API -.->|内部API| APP
-    WS -.->|リアルタイム| APP
+    GW --> PA1
+    GW --> PA2
+    GW --> PA3
+    
+    PA1 --> API
+    PA2 --> API
+    PA3 --> API
+    
+    API --> WS
+    API --> APP
+    WS --> APP
     
     APP -.->|SQL/InfluxQL| DB
     DB -.->|HTTP API| UI
     
     style GW fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style MQTT fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
     style API fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
     style APP fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
-    style PA1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style PA2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style PA3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style PA4 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style DRV1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style DRV2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style PA1 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style PA2 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style PA3 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
 ```
 
 ### 2. 疎結合化による効果
@@ -213,83 +231,90 @@ graph LR
 
 ## Gatewayによる解決アプローチ
 
-### 1. Gateway のコアコンセプト（ハードウェアドライバ構成）
+### 1. 開発対象の2層構成
 
 ```mermaid
 graph TB
-    subgraph "入力：多様なハードウェア"
-        INPUT1[BravePI<br/>UART /dev/ttyAMA0<br/>38400ボー・バイナリフレーム]
-        INPUT1B[BraveJIG<br/>USB Serial /dev/ttyACM0-9<br/>38400ボー・バイナリフレーム]
-        INPUT2[ESP32<br/>WiFi TCP/HTTP<br/>JSON形式]
-        INPUT3[Arduino<br/>USB Serial<br/>ASCII形式]
-        INPUT4[Generic I2C<br/>I2C Bus<br/>Raw Binary]
-        INPUT5[Modbus Device<br/>RS485/TCP<br/>Modbus RTU/TCP]
-    end
-    
-    subgraph "Gateway：ハードウェアドライバ層"
-        subgraph "Hardware Drivers"
-            D1[BravePI Driver<br/>bravepi_driver.py<br/>メッセージタイプ対応]
-            D1B[BraveJIG Driver<br/>bravejig_driver.py<br/>JIG専用処理]
-            D2[ESP32 Driver<br/>esp32_driver.py]
-            D3[Arduino Driver<br/>arduino_driver.py]
-            D4[I2C Driver<br/>i2c_driver.py]
-            D5[Modbus Driver<br/>modbus_driver.py]
+    subgraph "開発対象1：Driver Library（ベアメタル環境）"
+        subgraph "Hardware Layer"
+            HW1[BravePI/JIG<br/>UART/USB Serial<br/>38400ボー・バイナリフレーム]
+            HW2[I2C Sensors<br/>温度・湿度・圧力等<br/>I2C Bus・Raw Binary]
+            HW3[Modbus Devices<br/>産業機器<br/>RS485・Modbus RTU]
         end
         
-        subgraph "Protocol Parsers"
-            P1[Binary Frame Parser<br/>バイナリフレーム解析<br/>メッセージタイプ処理]
-            P2[JSON Parser<br/>json.loads関数]
-            P3[ASCII Parser<br/>str.decode関数]
-            P4[I2C Parser<br/>smbus2ライブラリ]
-            P5[Modbus Parser<br/>pymodbusライブラリ]
+        subgraph "Driver Libraries"
+            DRV1[BravePI Driver Library<br/>bravepi_driver.py<br/>UART/USB制御・プロトコル解析]
+            DRV2[I2C Driver Library<br/>i2c_driver.py<br/>I2C制御・センサー読み取り]
+            DRV3[Modbus Driver Library<br/>modbus_driver.py<br/>RS485制御・RTU処理]
         end
         
-        subgraph "Universal Converter"
-            CONV[Hardware Abstraction<br/>統一データ形式変換]
+        subgraph "MQTT Publisher"
+            PUB1[MQTT Client<br/>センサーデータをJSON変換<br/>Topic: sensors/device/type]
         end
     end
     
-    subgraph "出力：統一インターフェース"
-        OUTPUT["Universal JSON<br/>deviceId: xxx<br/>sensorType: temperature<br/>value: 25.5<br/>unit: ℃<br/>timestamp: 2025-06-06T10:30:00Z"]
+    subgraph "MQTT Broker（既存infrastructure）"
+        BROKER[Eclipse Mosquitto<br/>軽量・高信頼性<br/>QoS設定対応]
     end
     
-    INPUT1 --> D1 --> P1
-    INPUT1B --> D1B --> P1
-    INPUT2 --> D2 --> P2  
-    INPUT3 --> D3 --> P3
-    INPUT4 --> D4 --> P4
-    INPUT5 --> D5 --> P5
+    subgraph "開発対象2：Universal Gateway（ハードウェア非依存）"
+        subgraph "MQTT Subscriber"
+            SUB[MQTT Client<br/>全センサートピック購読<br/>リアルタイム受信]
+        end
+        
+        subgraph "Protocol Adapters"
+            PA1[BravePI Protocol Adapter<br/>バイナリフレーム→統一JSON]
+            PA2[Standard JSON Adapter<br/>JSON正規化・検証]
+            PA3[Legacy Protocol Adapter<br/>既存フォーマット対応]
+        end
+        
+        subgraph "Universal API"
+            API[REST API + WebSocket<br/>統一インターフェース<br/>ハードウェア非依存]
+        end
+    end
     
-    P1 --> CONV
-    P2 --> CONV
-    P3 --> CONV
-    P4 --> CONV
-    P5 --> CONV
+    HW1 --> DRV1 --> PUB1
+    HW2 --> DRV2 --> PUB1
+    HW3 --> DRV3 --> PUB1
     
-    CONV --> OUTPUT
+    PUB1 -.->|MQTT Publish| BROKER
+    BROKER -.->|MQTT Subscribe| SUB
     
-    style D1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style D1B fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style D2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style D3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style D4 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style D5 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style CONV fill:#fab005,stroke:#000,stroke-width:2px,color:#000
-    style OUTPUT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    SUB --> PA1
+    SUB --> PA2
+    SUB --> PA3
+    
+    PA1 --> API
+    PA2 --> API
+    PA3 --> API
+    
+    style DRV1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style DRV2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style DRV3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style BROKER fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
+    style PA1 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style PA2 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style PA3 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style API fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
-#### ハードウェア別ドライバ仕様
+#### 開発対象1：Driver Library 仕様
 
-| ハードウェア | ドライバファイル | 通信方式 | 主な機能 | 依存ライブラリ |
+| ハードウェア | Driver Library | 物理制御 | MQTT出力 | 依存ライブラリ |
 |-------------|----------------|----------|----------|---------------|
-| **BravePI** | `bravepi_driver.py` | UART /dev/ttyAMA0<br/>38400ボー | バイナリフレーム解析<br/>メッセージタイプ処理<br/>16センサータイプ対応 | `pyserial` |
-| **BraveJIG** | `bravejig_driver.py` | USB Serial /dev/ttyACM0-9<br/>38400ボー | バイナリフレーム解析<br/>JIG専用センサー対応<br/>高精度データ処理 | `pyserial` |
-| **ESP32** | `esp32_driver.py` | WiFi TCP/HTTP | JSON形式データ取得<br/>設定配信 | `requests`<br/>`aiohttp` |
-| **Arduino** | `arduino_driver.py` | USB Serial | ASCII形式データ解析<br/>シンプルプロトコル | `pyserial` |
-| **I2C Generic** | `i2c_driver.py` | I2C Bus | 直接I2Cセンサー制御<br/>温度・湿度・圧力等 | `smbus2`<br/>`adafruit-circuitpython` |
-| **Modbus** | `modbus_driver.py` | RS485/TCP | 産業用Modbus機器<br/>RTU/TCP対応 | `pymodbus` |
+| **BravePI/JIG** | `bravepi_driver.py` | UART/USB Serial制御<br/>38400ボー | バイナリフレーム解析<br/>→JSON変換<br/>→MQTT Publish | `pyserial`<br/>`paho-mqtt` |
+| **I2C Sensors** | `i2c_driver.py` | I2C Bus制御<br/>レジスタ読み書き | センサー値読み取り<br/>→JSON変換<br/>→MQTT Publish | `smbus2`<br/>`paho-mqtt` |
+| **Modbus Devices** | `modbus_driver.py` | RS485制御<br/>RTU/TCP通信 | Modbus応答解析<br/>→JSON変換<br/>→MQTT Publish | `pymodbus`<br/>`paho-mqtt` |
 
-#### 新規ハードウェアドライバ追加手順
+#### 開発対象2：Universal Gateway 仕様
+
+| コンポーネント | ファイル | 機能 | 入力 | 出力 |
+|---------------|----------|------|------|------|
+| **BravePI Protocol Adapter** | `bravepi_protocol_adapter.py` | バイナリフレーム解析<br/>メッセージタイプ処理 | MQTT Topic<br/>`sensors/bravepi/+/+` | 統一JSON |
+| **Standard JSON Adapter** | `json_adapter.py` | JSON正規化・検証<br/>フィールド統一 | MQTT Topic<br/>`sensors/esp32/+/+` | 統一JSON |
+| **Legacy Protocol Adapter** | `legacy_adapter.py` | 既存フォーマット対応<br/>後方互換性 | MQTT Topic<br/>`sensors/legacy/+/+` | 統一JSON |
+
+#### 新規ハードウェア対応手順
 
 ```mermaid
 graph LR
@@ -297,57 +322,73 @@ graph LR
         NEW_HW[新しいハードウェア<br/>例：Siemens PLC]
     end
     
-    subgraph "ドライバ開発"
-        STEP1[ドライバファイル作成<br/>siemens_driver.py]
-        STEP2[通信プロトコル実装<br/>S7通信]
-        STEP3[データパーサー実装<br/>PLC形式→JSON]
-        STEP4[設定ファイル更新<br/>config.yaml]
+    subgraph "Driver Library開発"
+        STEP1[Driver Library作成<br/>siemens_driver.py]
+        STEP2[物理制御実装<br/>S7通信プロトコル]
+        STEP3[データ変換実装<br/>PLC→JSON]
+        STEP4[MQTT Publisher実装<br/>Topic設計]
+    end
+    
+    subgraph "Gateway対応"
+        STEP5[Protocol Adapter追加<br/>siemens_protocol_adapter.py]
+        STEP6[MQTT Topic購読設定<br/>sensors/siemens/+/+]
     end
     
     subgraph "統合・テスト"
-        STEP5[Gateway登録<br/>driver_manager.py]
-        STEP6[動作テスト<br/>実機確認]
-        STEP7[本番配備<br/>工場ライン投入]
+        STEP7[E2Eテスト<br/>実機→MQTT→Gateway]
+        STEP8[本番配備<br/>工場ライン投入]
     end
     
     NEW_HW --> STEP1 --> STEP2 --> STEP3 --> STEP4
-    STEP4 --> STEP5 --> STEP6 --> STEP7
+    STEP4 --> STEP5 --> STEP6
+    STEP6 --> STEP7 --> STEP8
     
     style NEW_HW fill:#e9ecef,stroke:#000,stroke-width:2px,color:#000
     style STEP1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style STEP2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style STEP3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style STEP7 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style STEP4 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style STEP5 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style STEP6 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style STEP8 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
-**新規ドライバ開発手順**:
-1. ドライバファイル作成 (siemens_driver.py)
-2. 通信プロトコル実装 (S7通信)
-3. データパーサー実装 (PLC形式→JSON)
-4. 設定ファイル更新 (config.yaml)
-5. Gateway登録 (driver_manager.py)
-6. 動作テスト (実機確認)
-7. 本番配備 (工場ライン投入)
+**新規ハードウェア対応手順**:
+1. **Driver Library作成** (siemens_driver.py) - ベアメタル環境用
+2. **物理制御実装** (S7通信プロトコル) - ハードウェア固有処理
+3. **データ変換実装** (PLC→JSON) - 統一フォーマット変換
+4. **MQTT Publisher実装** (Topic設計) - sensors/siemens/device/type
+5. **Protocol Adapter追加** (siemens_protocol_adapter.py) - Gateway側
+6. **MQTT Topic購読設定** - Gateway設定更新
+7. **E2Eテスト** (実機→MQTT→Gateway) - 統合動作確認
+8. **本番配備** (工場ライン投入) - 運用開始
 
-**新規ドライバ開発期間**: 既存のBravePIドライバをベースに **1-2週間** で完成
-（従来の3-6ヶ月から大幅短縮）
+**開発期間**: 
+- Driver Library: **1週間** (既存BravePIライブラリをベース)
+- Gateway対応: **2-3日** (設定追加のみ)
+- **総計 1-2週間** で完成（従来の3-6ヶ月から大幅短縮）
 
-### 2. Gateway出力後の通信規格（工場・現場向けドライバ）
+### 2. Universal Gateway 出力仕様（工場・現場向け）
 
-**ドライバとしての設計方針**: 
-- **シンプル・確実**: 複雑な機能は排除、基本機能に特化
-- **工場標準**: 製造業で実績のある通信方式のみ採用
-- **保守性重視**: 故障リスク最小化、トラブル時の対応容易性
+**ハードウェア非依存設計方針**: 
+- **MQTT中心**: リアルタイム・軽量・高信頼性
+- **工場標準**: 製造業で実績のある通信方式
+- **統一API**: どのハードウェアからのデータも同一形式
 
 ```mermaid
 graph TB
-    subgraph "Gateway出力"
-        GW_OUT[統一JSON形式<br/>Universal Sensor Data]
+    subgraph "MQTT入力"
+        MQTT_IN[MQTT Broker<br/>sensors/+/+/+<br/>複数ハードウェア対応]
     end
     
-    subgraph "ドライバ通信方式"
-        REST[REST API<br/>HTTP/HTTPS<br/>基本データ取得・設定]
-        MQTT_OUT[MQTT<br/>工場内軽量通信<br/>データ配信]
+    subgraph "Universal Gateway処理"
+        GATEWAY[Gateway Core<br/>Protocol Adapter実行<br/>統一JSON生成]
+    end
+    
+    subgraph "統一API出力"
+        REST[REST API<br/>HTTP/HTTPS<br/>GET /api/sensors<br/>POST /api/config]
+        WS[WebSocket<br/>リアルタイム配信<br/>統一JSON Stream]
+        MQTT_OUT[MQTT Publish<br/>processed/sensors/+<br/>統一フォーマット]
     end
     
     subgraph "工場・現場システム"
