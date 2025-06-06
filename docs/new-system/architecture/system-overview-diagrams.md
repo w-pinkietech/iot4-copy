@@ -290,16 +290,16 @@ graph LR
     end
     
     subgraph "ドライバ開発"
-        STEP1[1. ドライバファイル作成<br/>siemens_driver.py]
-        STEP2[2. 通信プロトコル実装<br/>S7通信]
-        STEP3[3. データパーサー実装<br/>PLC形式→JSON]
-        STEP4[4. 設定ファイル更新<br/>config.yaml]
+        STEP1[ドライバファイル作成<br/>siemens_driver.py]
+        STEP2[通信プロトコル実装<br/>S7通信]
+        STEP3[データパーサー実装<br/>PLC形式→JSON]
+        STEP4[設定ファイル更新<br/>config.yaml]
     end
     
     subgraph "統合・テスト"
-        STEP5[5. Gateway登録<br/>driver_manager.py]
-        STEP6[6. 動作テスト<br/>実機確認]
-        STEP7[7. 本番配備<br/>工場ライン投入]
+        STEP5[Gateway登録<br/>driver_manager.py]
+        STEP6[動作テスト<br/>実機確認]
+        STEP7[本番配備<br/>工場ライン投入]
     end
     
     NEW_HW --> STEP1 --> STEP2 --> STEP3 --> STEP4
@@ -311,6 +311,15 @@ graph LR
     style STEP3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style STEP7 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
+
+**新規ドライバ開発手順**:
+1. ドライバファイル作成 (siemens_driver.py)
+2. 通信プロトコル実装 (S7通信)
+3. データパーサー実装 (PLC形式→JSON)
+4. 設定ファイル更新 (config.yaml)
+5. Gateway登録 (driver_manager.py)
+6. 動作テスト (実機確認)
+7. 本番配備 (工場ライン投入)
 
 **新規ドライバ開発期間**: 既存のBravePIドライバをベースに **1-2週間** で完成
 （従来の3-6ヶ月から大幅短縮）
@@ -537,49 +546,6 @@ graph TB
     style W12 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
-### 3. Phase 2: 並行運用アーキテクチャ
-
-```mermaid
-graph TB
-    subgraph "BravePIデバイス"
-        BPI[BravePI/JIG Hardware]
-    end
-    
-    subgraph "データ分岐"
-        SPLIT[Data Splitter<br/>データ複製配信]
-    end
-    
-    subgraph "既存システム（継続稼働）"
-        OLD_NR[Node-RED<br/>既存1017ノード]
-        OLD_DB[MariaDB/InfluxDB<br/>既存スキーマ]
-        OLD_UI[既存Dashboard]
-    end
-    
-    subgraph "新Gateway（検証）"
-        NEW_GW[Python Gateway<br/>🌟 新実装]
-        NEW_API[REST API]
-        NEW_DB[統一Database]
-        NEW_UI[新Dashboard]
-    end
-    
-    subgraph "データ整合性検証"
-        VALIDATOR[Data Validator<br/>新旧比較・差分検出]
-    end
-    
-    BPI --> SPLIT
-    SPLIT --> OLD_NR
-    SPLIT --> NEW_GW
-    
-    OLD_NR --> OLD_DB --> OLD_UI
-    NEW_GW --> NEW_API --> NEW_DB --> NEW_UI
-    
-    OLD_DB --> VALIDATOR
-    NEW_DB --> VALIDATOR
-    
-    style NEW_GW fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
-    style VALIDATOR fill:#fab005,stroke:#000,stroke-width:2px,color:#000
-    style SPLIT fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-```
 
 ## 実装優先度とROI
 
