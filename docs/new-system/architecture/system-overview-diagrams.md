@@ -78,7 +78,7 @@ graph TB
 ### 2. 密結合による具体的問題
 
 ```mermaid
-graph LR
+graph TB
     subgraph "問題1：ベンダーロックイン"
         A[新しいハードウェア追加要求]
         A --> B[全システム修正必要]
@@ -89,9 +89,9 @@ graph LR
     subgraph "問題2：保守性の悪化"
         E[センサータイプ追加]
         E --> F[53個のFunctionノード修正]
-        E --> G[380個のHardwareノード修正]
-        E --> H[データベーススキーマ変更]
-        E --> I[UI表示ロジック修正]
+        F --> G[380個のHardwareノード修正]
+        G --> H[データベーススキーマ変更]
+        H --> I[UI表示ロジック修正]
     end
     
     subgraph "問題3：テスト困難性"
@@ -102,11 +102,13 @@ graph LR
     end
     
     style B fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style C fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
     style F fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
     style G fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
     style H fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
     style I fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
     style K fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
+    style L fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
 ```
 
 ## 疎結合化の全体戦略（図解）
@@ -237,7 +239,7 @@ graph LR
     end
     
     subgraph "出力：統一JSON形式"
-        OUTPUT[Universal JSON<br/>{<br/>  "deviceId": "xxx",<br/>  "sensorType": "temperature",<br/>  "value": 25.5,<br/>  "unit": "℃",<br/>  "timestamp": "2025-06-06T10:30:00Z"<br/>}]
+        OUTPUT["Universal JSON<br/>deviceId: xxx<br/>sensorType: temperature<br/>value: 25.5<br/>unit: ℃<br/>timestamp: 2025-06-06T10:30:00Z"]
     end
     
     INPUT1 --> P1
@@ -274,7 +276,7 @@ graph TB
     end
     
     subgraph "統一JSON出力"
-        JSON[{<br/>  "deviceId": "bravepi-12345678",<br/>  "sensorType": "temperature",<br/>  "value": 25.5,<br/>  "unit": "℃",<br/>  "timestamp": "2025-06-06T10:30:00Z",<br/>  "quality": "good",<br/>  "metadata": {<br/>    "source": "bravepi",<br/>    "rawSensorType": 261<br/>  }<br/>}]
+        JSON["統一JSON形式<br/>deviceId: bravepi-12345678<br/>sensorType: temperature<br/>value: 25.5<br/>unit: ℃<br/>timestamp: 2025-06-06T10:30:00Z<br/>quality: good<br/>metadata: source=bravepi"]
     end
     
     FRAME --> PARSE
