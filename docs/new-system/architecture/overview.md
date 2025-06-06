@@ -15,10 +15,13 @@
 
 - **シンプル**: 技術スタックを最小限に
 - **疎結合**: 各コンポーネントの独立性を確保
+- **ベンダー中立性**: 特定ハードウェアに依存しない設計
+- **相互運用性**: 他社製品との容易な統合
 - **保守性**: 1人でも管理可能な構成
 - **AI親和性**: テキストベースのコードでAI支援を最大化
 - **ポータビリティ**: コレクター層以上は任意のLinux環境で動作
 - **スケーラビリティ**: 複数のエッジデバイスからのデータ収集に対応
+- **拡張性**: プラグインによる新デバイス対応
 
 ## システム構成図
 
@@ -30,19 +33,19 @@ graph TB
         subgraph "RPi4 Gateway A"
             RPi4HAL[Edge Gateway Service<br/>- 複数センサー統合管理<br/>- ローカル設定管理<br/>- 自己完結型データ送信]
             RPi4DB[(SQLite<br/>ローカル設定)]
-            RPi4Sensors[BravePI + I2C/GPIO<br/>センサー群]
+            RPi4Sensors[プラグイン対応<br/>BravePI/他社製デバイス]
         end
         
         subgraph "RPi5 Gateway B"
             RPi5HAL[Edge Gateway Service<br/>- libgpiod対応<br/>- 複数センサー統合管理<br/>- ローカル設定管理]
             RPi5DB[(SQLite<br/>ローカル設定)]
-            RPi5Sensors[センサー群]
+            RPi5Sensors[プラグイン対応<br/>任意ベンダーデバイス]
         end
         
         subgraph "Other Gateway C"
             OtherHAL[Edge Gateway Service<br/>- デバイス固有実装<br/>- センサー統合管理]
             OtherDB[(SQLite<br/>ローカル設定)]
-            OtherSensors[センサー群]
+            OtherSensors[プラグイン対応<br/>OMRON/Keyence/Siemens等]
         end
     end
     
@@ -96,51 +99,56 @@ graph TB
 ### Layer 1: Edge Gateway Layer（エッジゲートウェイ層）
 
 **責務**
-- 複数センサーの統合管理
-- ローカル設定としきい値の管理
-- ローカルStreamlit設定UI提供
-- 自己完結型MQTTメッセージの送信
+- **プラグインベースのデバイス管理**: 任意ベンダーのデバイス対応
+- **ローカル設定管理**: SQLiteによる独立した設定管理
+- **標準化されたデータ収集**: ベンダー中立的なインターフェース
+- **統一MQTTメッセージ**: デバイス種別に関わらず統一フォーマット
+- **ローカルStreamlit設定UI**: デバイス種別を問わない統一UI
 
-**Edge Gateway Service**
+**Edge Gateway Service（疎結合版）**
 ```python
 # edge/gateway_service.py
 class EdgeGatewayService:
     def __init__(self, gateway_id: str):
         self.gateway_id = gateway_id
-        self.db = LocalSQLiteDB()  # ローカル設定DB
-        self.sensors = load_sensor_drivers()
+        self.db = LocalSQLiteDB()
+        self.device_manager = DeviceManager("config/devices.yml")
         self.mqtt_client = MQTTClient()
     
+    async def initialize(self):
+        """全デバイスの初期化"""
+        await self.device_manager.initialize_all_devices()
+    
     async def collect_and_publish(self):
-        for sensor in self.sensors:
-            # センサー値読み取り
-            value = sensor.read()
-            
-            # ローカル設定を取得
-            config = self.db.get_sensor_config(sensor.id)
-            
-            # 自己完結型メッセージを構築
-            message = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "gateway_id": self.gateway_id,
-                "sensor": {
-                    "id": sensor.id,
-                    "type": config.sensor_type,
-                    "name": config.name,
-                    "unit": config.unit,
-                    "value": value
-                },
-                "thresholds": {
-                    "high": config.threshold_high,
-                    "low": config.threshold_low
-                },
-                "metadata": {
-                    "location": config.location,
-                    "calibration": config.offset
-                }
+        """ベンダー中立的なデータ収集・送信"""
+        # 全デバイスから標準化されたデータを取得
+        all_readings = await self.device_manager.read_all_sensors()
+        
+        # デバイス別にグループ化
+        devices_data = self._group_by_device(all_readings)
+        
+        # 統一フォーマットのMQTTメッセージを構築
+        message = {
+            "schema_version": "1.0",
+            "gateway_id": self.gateway_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "devices": []
+        }
+        
+        for device_name, readings in devices_data.items():
+            device_info = await self.device_manager.get_device_info(device_name)
+            device_data = {
+                "device_name": device_name,
+                "device_type": device_info.capability.device_type,
+                "vendor": device_info.vendor,
+                "model": device_info.model,
+                "status": "online",
+                "sensors": [reading.to_dict() for reading in readings]
             }
-            
-            await self.mqtt_client.publish("sensors/data", message)
+            message["devices"].append(device_data)
+        
+        # ベンダー中立的な標準MQTTトピックに送信
+        await self.mqtt_client.publish("gateway/data", message)
 ```
 
 **Local Streamlit Configuration UI**
