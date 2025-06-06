@@ -119,58 +119,60 @@ graph TB
 graph TB
     subgraph "目標：疎結合システム"
         subgraph "多様なハードウェア層"
-            BPI[BravePI]
-            BJG[BraveJIG]
-            ESP[ESP32]
-            ARD[Arduino]
-            OTH[その他IoTデバイス]
+            BPI[BravePI<br/>UART /dev/ttyAMA0<br/>38400ボー<br/>バイナリフレーム]
+            BJG[BraveJIG<br/>USB Serial /dev/ttyACM0-9<br/>38400ボー<br/>バイナリフレーム]
+            ESP[ESP32<br/>WiFi TCP/HTTP<br/>JSON通信]
+            ARD[Arduino<br/>USB Serial<br/>ASCII/JSON]
+            OTH[その他IoTデバイス<br/>MQTT/Modbus<br/>標準プロトコル]
         end
         
         subgraph "Gateway抽象化層"
-            GW[Universal Gateway<br/>🌟 新規実装]
+            GW[Universal Gateway<br/>🌟 新規実装<br/>統一JSON出力]
             subgraph "Protocol Adapters"
-                PA1[BravePI Adapter]
-                PA2[ESP32 Adapter]
-                PA3[MQTT Adapter]
+                PA1[BravePI Adapter<br/>UART → JSON<br/>プロトコル解析]
+                PA2[BraveJIG Adapter<br/>USB Serial → JSON<br/>プロトコル解析]
+                PA3[ESP32 Adapter<br/>WiFi HTTP → JSON]
+                PA4[MQTT Adapter<br/>MQTT → JSON]
             end
         end
         
         subgraph "統一API層"
-            API[REST API<br/>統一インターフェース]
-            WS[WebSocket<br/>リアルタイム配信]
+            API[REST API<br/>HTTP/HTTPS<br/>統一インターフェース]
+            WS[WebSocket<br/>リアルタイム配信<br/>JSON Stream]
         end
         
         subgraph "アプリケーション層"
-            APP[統一アプリケーション<br/>ハードウェア非依存]
+            APP[統一アプリケーション<br/>ハードウェア非依存<br/>内部API通信]
         end
         
         subgraph "データ層"
-            DB[統一データベース<br/>ベンダー中立スキーマ]
+            DB[統一データベース<br/>PostgreSQL + InfluxDB<br/>ベンダー中立スキーマ]
         end
         
         subgraph "ユーザーインターフェース"
-            UI[統一Dashboard<br/>ハードウェア非依存UI]
+            UI[統一Dashboard<br/>React + WebSocket<br/>ハードウェア非依存UI]
         end
     end
     
-    BPI --> PA1
-    BJG --> PA1
-    ESP --> PA2
-    ARD --> PA2
-    OTH --> PA3
+    BPI -.->|UART 38400ボー| PA1
+    BJG -.->|USB Serial 38400ボー| PA2
+    ESP -.->|WiFi HTTP| PA3
+    ARD -.->|USB Serial| PA3
+    OTH -.->|MQTT/TCP| PA4
     
-    PA1 --> GW
-    PA2 --> GW
-    PA3 --> GW
+    PA1 -.->|JSON| GW
+    PA2 -.->|JSON| GW
+    PA3 -.->|JSON| GW
+    PA4 -.->|JSON| GW
     
-    GW --> API
-    GW --> WS
+    GW -.->|HTTP| API
+    GW -.->|WebSocket| WS
     
-    API --> APP
-    WS --> APP
+    API -.->|内部API| APP
+    WS -.->|リアルタイム| APP
     
-    APP --> DB
-    DB --> UI
+    APP -.->|SQL/InfluxQL| DB
+    DB -.->|HTTP API| UI
     
     style GW fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
     style API fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
@@ -178,6 +180,7 @@ graph TB
     style PA1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style PA2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style PA3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style PA4 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
 ```
 
 ### 2. 疎結合化による効果
@@ -215,7 +218,8 @@ graph LR
 ```mermaid
 graph TB
     subgraph "入力：多様なハードウェア"
-        INPUT1[BravePI<br/>UART 38400baud<br/>バイナリプロトコル]
+        INPUT1[BravePI<br/>UART /dev/ttyAMA0<br/>38400ボー・バイナリフレーム]
+        INPUT1B[BraveJIG<br/>USB Serial /dev/ttyACM0-9<br/>38400ボー・バイナリフレーム]
         INPUT2[ESP32<br/>WiFi TCP/HTTP<br/>JSON形式]
         INPUT3[Arduino<br/>USB Serial<br/>ASCII形式]
         INPUT4[Generic I2C<br/>I2C Bus<br/>Raw Binary]
@@ -224,7 +228,8 @@ graph TB
     
     subgraph "Gateway：ハードウェアドライバ層"
         subgraph "Hardware Drivers"
-            D1[BravePI Driver<br/>bravepi_driver.py]
+            D1[BravePI Driver<br/>bravepi_driver.py<br/>メッセージタイプ対応]
+            D1B[BraveJIG Driver<br/>bravejig_driver.py<br/>JIG専用処理]
             D2[ESP32 Driver<br/>esp32_driver.py]
             D3[Arduino Driver<br/>arduino_driver.py]
             D4[I2C Driver<br/>i2c_driver.py]
@@ -232,7 +237,7 @@ graph TB
         end
         
         subgraph "Protocol Parsers"
-            P1[Binary Parser<br/>struct.unpack関数]
+            P1[Binary Frame Parser<br/>バイナリフレーム解析<br/>メッセージタイプ処理]
             P2[JSON Parser<br/>json.loads関数]
             P3[ASCII Parser<br/>str.decode関数]
             P4[I2C Parser<br/>smbus2ライブラリ]
@@ -249,6 +254,7 @@ graph TB
     end
     
     INPUT1 --> D1 --> P1
+    INPUT1B --> D1B --> P1
     INPUT2 --> D2 --> P2  
     INPUT3 --> D3 --> P3
     INPUT4 --> D4 --> P4
@@ -263,6 +269,7 @@ graph TB
     CONV --> OUTPUT
     
     style D1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style D1B fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style D2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style D3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style D4 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
@@ -275,7 +282,8 @@ graph TB
 
 | ハードウェア | ドライバファイル | 通信方式 | 主な機能 | 依存ライブラリ |
 |-------------|----------------|----------|----------|---------------|
-| **BravePI/JIG** | `bravepi_driver.py` | UART Serial | バイナリフレーム解析<br/>16センサータイプ対応 | `pyserial` |
+| **BravePI** | `bravepi_driver.py` | UART /dev/ttyAMA0<br/>38400ボー | バイナリフレーム解析<br/>メッセージタイプ処理<br/>16センサータイプ対応 | `pyserial` |
+| **BraveJIG** | `bravejig_driver.py` | USB Serial /dev/ttyACM0-9<br/>38400ボー | バイナリフレーム解析<br/>JIG専用センサー対応<br/>高精度データ処理 | `pyserial` |
 | **ESP32** | `esp32_driver.py` | WiFi TCP/HTTP | JSON形式データ取得<br/>設定配信 | `requests`<br/>`aiohttp` |
 | **Arduino** | `arduino_driver.py` | USB Serial | ASCII形式データ解析<br/>シンプルプロトコル | `pyserial` |
 | **I2C Generic** | `i2c_driver.py` | I2C Bus | 直接I2Cセンサー制御<br/>温度・湿度・圧力等 | `smbus2`<br/>`adafruit-circuitpython` |
@@ -387,33 +395,44 @@ Topic: factory/line1/{device_id}/status      # デバイス状態
 Topic: factory/alerts/{alert_level}          # アラート通知
 ```
 
-### 3. BravePI専用プロトコル変換の詳細
+### 3. BravePI/JIGプロトコル変換の詳細
 
 ```mermaid
 graph TB
-    subgraph "BravePI バイナリフレーム"
-        FRAME["Protocol・Type・Length・Timestamp・Device#・Sensor・Payload<br/>1byte・1byte・2bytes・4bytes・8bytes・2bytes・n bytes"]
+    subgraph "BravePI/JIG バイナリフレーム構造"
+        FRAME["プロトコル(1) | タイプ(1) | 長さ(2) | タイムスタンプ(4) | デバイス番号(8) | データ(n)<br/>1byte・1byte・2bytes・4bytes・8bytes・n bytes"]
+        
+        subgraph "メッセージタイプ"
+            TYPE0[0x00: 通常センサーデータ]
+            TYPE1[0x01: ダウンリンク応答]
+            TYPE2[0x02: JIG情報]
+            TYPE3[0x03: ファームウェア更新]
+            TYPEFF[0xFF: エラー応答]
+        end
     end
     
-    subgraph "Gateway 解析処理"
-        PARSE[Frame Parser<br/>バイナリ解析]
-        MAP[Sensor Type Mapping<br/>257→contact_input<br/>261→temperature<br/>289→illuminance_jig]
+    subgraph "Gateway プロトコル解析処理"
+        PARSE[Frame Parser<br/>バイナリフレーム解析<br/>CRC16チェック]
+        TYPEMAP[Message Type Handler<br/>0x00→データ処理<br/>0x01→応答処理<br/>0x02→JIG情報処理]
+        SENSORMAP[Sensor Type Mapping<br/>257→contact_input<br/>261→temperature<br/>289→illuminance_jig]
         EXTRACT[Value Extractor<br/>ペイロードからセンサー値抽出]
         CALIB[Calibration<br/>較正・単位変換]
     end
     
     subgraph "統一JSON出力"
-        JSON["統一JSON形式<br/>deviceId: bravepi-12345678<br/>sensorType: temperature<br/>value: 25.5<br/>unit: ℃<br/>timestamp: 2025-06-06T10:30:00Z<br/>quality: good<br/>metadata: source=bravepi"]
+        JSON["統一JSON形式<br/>deviceId: bravepi-12345678<br/>sensorType: temperature<br/>value: 25.5<br/>unit: ℃<br/>timestamp: 2025-06-06T10:30:00Z<br/>quality: good<br/>messageType: 0x00<br/>metadata: source=bravepi/bravejig"]
     end
     
     FRAME --> PARSE
-    PARSE --> MAP
-    MAP --> EXTRACT
+    PARSE --> TYPEMAP
+    TYPEMAP --> SENSORMAP
+    SENSORMAP --> EXTRACT
     EXTRACT --> CALIB
     CALIB --> JSON
     
     style PARSE fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style MAP fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style TYPEMAP fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style SENSORMAP fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style JSON fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
