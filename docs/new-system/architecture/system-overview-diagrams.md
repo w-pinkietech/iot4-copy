@@ -119,17 +119,18 @@ graph TB
 graph TB
     subgraph "目標：疎結合システム"
         subgraph "ハードウェア環境層（ベアメタル）"
-            subgraph "BravePI/JIG環境"
+            subgraph "Raspberry Pi 4 環境（初期実装）"
+                RPI4[Raspberry Pi 4<br/>⚠️ プラットフォーム依存<br/>GPIO・UART・I2C制御]
                 BPI[BravePI<br/>UART /dev/ttyAMA0<br/>38400ボー・バイナリフレーム]
                 BJG[BraveJIG<br/>USB Serial /dev/ttyACM0-9<br/>38400ボー・バイナリフレーム]
-                DRV1[Driver Library<br/>bravepi_driver.py<br/>物理制御→MQTT変換]
+                I2C[I2C Sensors<br/>/dev/i2c-1・レジスタ制御]
+                DRV1[Driver Library<br/>🔒 RPi4専用実装<br/>物理制御→MQTT変換]
             end
             
-            subgraph "その他ハードウェア環境"
-                ESP[ESP32<br/>内蔵WiFi・MQTT Client]
-                ARD[Arduino<br/>WiFi Shield・MQTT]
-                I2C[I2C Sensors<br/>Raspberry Pi・Bridge]
-                DRV2[Driver Library<br/>i2c_driver.py<br/>物理制御→MQTT変換]
+            subgraph "その他ハードウェア環境（将来対応）"
+                ESP[ESP32<br/>内蔵WiFi・MQTT Client<br/>✅ ハードウェア非依存]
+                ARD[Arduino<br/>WiFi Shield・MQTT<br/>✅ ハードウェア非依存]
+                PC[PC/サーバー環境<br/>USB Serial のみ対応<br/>⏳ 将来移植予定]
             end
         end
         
@@ -148,7 +149,7 @@ graph TB
         
         subgraph "統一API層"
             API[REST API<br/>HTTP/HTTPS<br/>統一インターフェース]
-            WS[WebSocket<br/>リアルタイム配信<br/>JSON Stream]
+            MQTT_OUT[MQTT Output<br/>processed/sensors/+<br/>統一JSON配信]
         end
         
         subgraph "アプリケーション層"
@@ -164,14 +165,17 @@ graph TB
         end
     end
     
+    RPI4 --> BPI
+    RPI4 --> BJG  
+    RPI4 --> I2C
     BPI --> DRV1
     BJG --> DRV1
-    I2C --> DRV2
+    I2C --> DRV1
     
     DRV1 -.->|MQTT Publish| MQTT
-    DRV2 -.->|MQTT Publish| MQTT
     ESP -.->|MQTT Publish| MQTT
     ARD -.->|MQTT Publish| MQTT
+    PC -.->|⏳ 将来対応| MQTT
     
     MQTT -.->|MQTT Subscribe| GW
     
@@ -182,10 +186,12 @@ graph TB
     PA1 --> API
     PA2 --> API
     PA3 --> API
+    PA1 --> MQTT_OUT
+    PA2 --> MQTT_OUT
+    PA3 --> MQTT_OUT
     
-    API --> WS
     API --> APP
-    WS --> APP
+    MQTT_OUT --> APP
     
     APP -.->|SQL/InfluxQL| DB
     DB -.->|HTTP API| UI
@@ -193,6 +199,7 @@ graph TB
     style GW fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
     style MQTT fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
     style API fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style MQTT_OUT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
     style APP fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
     style DRV1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style DRV2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
@@ -235,17 +242,17 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph "開発対象1：Driver Library（ベアメタル環境）"
+    subgraph "開発対象1：Driver Library（Raspberry Pi 4専用）"
         subgraph "Hardware Layer"
             HW1[BravePI/JIG<br/>UART/USB Serial<br/>38400ボー・バイナリフレーム]
             HW2[I2C Sensors<br/>温度・湿度・圧力等<br/>I2C Bus・Raw Binary]
             HW3[Modbus Devices<br/>産業機器<br/>RS485・Modbus RTU]
         end
         
-        subgraph "Driver Libraries"
-            DRV1[BravePI Driver Library<br/>bravepi_driver.py<br/>UART/USB制御・プロトコル解析]
-            DRV2[I2C Driver Library<br/>i2c_driver.py<br/>I2C制御・センサー読み取り]
-            DRV3[Modbus Driver Library<br/>modbus_driver.py<br/>RS485制御・RTU処理]
+        subgraph "Driver Libraries（RPi4専用実装）"
+            DRV1[BravePI Driver Library<br/>bravepi_driver.py<br/>🔒 RPi4 GPIO/UART依存]
+            DRV2[I2C Driver Library<br/>i2c_driver.py<br/>🔒 RPi4 I2C依存]
+            DRV3[Modbus Driver Library<br/>modbus_driver.py<br/>🔒 RPi4 USB-RS485依存]
         end
         
         subgraph "MQTT Publisher"
@@ -269,7 +276,7 @@ graph TB
         end
         
         subgraph "Universal API"
-            API[REST API + WebSocket<br/>統一インターフェース<br/>ハードウェア非依存]
+            API[REST API + MQTT Output<br/>統一インターフェース<br/>ハードウェア非依存]
         end
     end
     
@@ -298,13 +305,16 @@ graph TB
     style API fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
-#### 開発対象1：Driver Library 仕様
+#### 開発対象1：Driver Library 仕様（初期実装：Raspberry Pi 4依存）
 
-| ハードウェア | Driver Library | 物理制御 | MQTT出力 | 依存ライブラリ |
-|-------------|----------------|----------|----------|---------------|
-| **BravePI/JIG** | `bravepi_driver.py` | UART/USB Serial制御<br/>38400ボー | バイナリフレーム解析<br/>→JSON変換<br/>→MQTT Publish | `pyserial`<br/>`paho-mqtt` |
-| **I2C Sensors** | `i2c_driver.py` | I2C Bus制御<br/>レジスタ読み書き | センサー値読み取り<br/>→JSON変換<br/>→MQTT Publish | `smbus2`<br/>`paho-mqtt` |
-| **Modbus Devices** | `modbus_driver.py` | RS485制御<br/>RTU/TCP通信 | Modbus応答解析<br/>→JSON変換<br/>→MQTT Publish | `pymodbus`<br/>`paho-mqtt` |
+| ハードウェア | Driver Library | 物理制御 | MQTT出力 | 依存ライブラリ | プラットフォーム依存 |
+|-------------|----------------|----------|----------|---------------|------------------|
+| **BravePI/JIG** | `bravepi_driver.py` | UART/USB Serial制御<br/>38400ボー | バイナリフレーム解析<br/>→JSON変換<br/>→MQTT Publish | `pyserial`<br/>`paho-mqtt` | **RPi4**: `/dev/ttyAMA0`<br/>GPIO制御依存 |
+| **I2C Sensors** | `i2c_driver.py` | I2C Bus制御<br/>レジスタ読み書き | センサー値読み取り<br/>→JSON変換<br/>→MQTT Publish | `smbus2`<br/>`paho-mqtt` | **RPi4**: `/dev/i2c-1`<br/>GPIO・I2C依存 |
+| **Modbus Devices** | `modbus_driver.py` | RS485制御<br/>RTU/TCP通信 | Modbus応答解析<br/>→JSON変換<br/>→MQTT Publish | `pymodbus`<br/>`paho-mqtt` | **RPi4**: USB-RS485<br/>GPIO制御依存 |
+
+⚠️ **初期実装の制約**: Driver LibraryはRaspberry Pi 4の物理インターフェース（GPIO、UART、I2C）に依存します。
+他のプラットフォーム（PC、組み込みLinux等）への移植は将来対応予定です。
 
 #### 開発対象2：Universal Gateway 仕様
 
@@ -364,9 +374,12 @@ graph LR
 8. **本番配備** (工場ライン投入) - 運用開始
 
 **開発期間**: 
-- Driver Library: **1週間** (既存BravePIライブラリをベース)
-- Gateway対応: **2-3日** (設定追加のみ)
+- Driver Library: **1週間** (既存BravePIライブラリをベース、**RPi4専用**)
+- Gateway対応: **2-3日** (設定追加のみ、ハードウェア非依存)
 - **総計 1-2週間** で完成（従来の3-6ヶ月から大幅短縮）
+
+**⚠️ 初期制約**: Driver Libraryは**Raspberry Pi 4 専用**実装となります。
+他のプラットフォーム（PC、組み込みLinux）対応は段階的移植として将来実装予定です。
 
 ### 2. Universal Gateway 出力仕様（工場・現場向け）
 
@@ -387,8 +400,7 @@ graph TB
     
     subgraph "統一API出力"
         REST[REST API<br/>HTTP/HTTPS<br/>GET /api/sensors<br/>POST /api/config]
-        WS[WebSocket<br/>リアルタイム配信<br/>統一JSON Stream]
-        MQTT_OUT[MQTT Publish<br/>processed/sensors/+<br/>統一フォーマット]
+        MQTT_OUT[MQTT Publish<br/>processed/sensors/+<br/>統一フォーマット配信]
     end
     
     subgraph "工場・現場システム"
@@ -399,8 +411,9 @@ graph TB
         LOGGER[データロガー<br/>ローカル記録]
     end
     
-    GW_OUT --> REST
-    GW_OUT --> MQTT_OUT
+    MQTT_IN -.->|MQTT Subscribe| GATEWAY
+    GATEWAY --> REST
+    GATEWAY --> MQTT_OUT
     
     REST --> SCADA
     REST --> MES
@@ -410,9 +423,10 @@ graph TB
     MQTT_OUT --> LOGGER
     MQTT_OUT --> HMI
     
-    style GW_OUT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
-    style REST fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
-    style MQTT_OUT fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
+    style MQTT_IN fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
+    style GATEWAY fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style REST fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style MQTT_OUT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
 #### 工場・現場での通信規格
