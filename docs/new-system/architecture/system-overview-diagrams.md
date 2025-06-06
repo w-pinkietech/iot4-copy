@@ -124,7 +124,12 @@ graph TB
                 BPI[BravePI<br/>UART /dev/ttyAMA0<br/>38400ボー・バイナリフレーム]
                 BJG[BraveJIG<br/>USB Serial /dev/ttyACM0-9<br/>38400ボー・バイナリフレーム]
                 I2C[I2C Sensors<br/>/dev/i2c-1・レジスタ制御]
-                DRV1[Driver Library<br/>🔒 RPi4専用実装<br/>物理制御→MQTT変換]
+                
+                subgraph "汎用通信Driver Library"
+                    UART_DRV[UART Driver<br/>uart_driver.py<br/>物理制御のみ]
+                    USB_DRV[USB Serial Driver<br/>usb_serial_driver.py<br/>物理制御のみ]
+                    I2C_DRV[I2C Driver<br/>i2c_driver.py<br/>物理制御のみ]
+                end
             end
             
             subgraph "その他ハードウェア環境（将来対応）"
@@ -140,10 +145,11 @@ graph TB
         
         subgraph "Universal Gateway（ハードウェア非依存）"
             GW[Gateway Core<br/>🌟 新規実装<br/>MQTT Subscribe]
-            subgraph "Protocol Adapters"
-                PA1[BravePI Protocol Adapter<br/>バイナリフレーム解析]
-                PA2[Standard JSON Adapter<br/>JSON正規化]
-                PA3[Legacy Protocol Adapter<br/>既存フォーマット対応]
+            subgraph "Protocol Adapters（プロトコル固有処理）"
+                PA1[BravePI Protocol Adapter<br/>バイナリフレーム解析<br/>メッセージタイプ処理]
+                PA2[BraveJIG Protocol Adapter<br/>JIG専用センサー対応<br/>高精度データ処理]
+                PA3[Standard JSON Adapter<br/>JSON正規化]
+                PA4[Legacy Protocol Adapter<br/>既存フォーマット対応]
             end
         end
         
@@ -168,11 +174,13 @@ graph TB
     RPI4 --> BPI
     RPI4 --> BJG  
     RPI4 --> I2C
-    BPI --> DRV1
-    BJG --> DRV1
-    I2C --> DRV1
+    BPI --> UART_DRV
+    BJG --> USB_DRV
+    I2C --> I2C_DRV
     
-    DRV1 -.->|MQTT Publish| MQTT
+    UART_DRV -.->|Raw MQTT Publish<br/>raw/uart/data| MQTT
+    USB_DRV -.->|Raw MQTT Publish<br/>raw/usb_serial/data| MQTT
+    I2C_DRV -.->|Raw MQTT Publish<br/>raw/i2c/data| MQTT
     ESP -.->|MQTT Publish| MQTT
     ARD -.->|MQTT Publish| MQTT
     PC -.->|⏳ 将来対応| MQTT
@@ -182,13 +190,16 @@ graph TB
     GW --> PA1
     GW --> PA2
     GW --> PA3
+    GW --> PA4
     
     PA1 --> API
     PA2 --> API
     PA3 --> API
+    PA4 --> API
     PA1 --> MQTT_OUT
     PA2 --> MQTT_OUT
     PA3 --> MQTT_OUT
+    PA4 --> MQTT_OUT
     
     API --> APP
     MQTT_OUT --> APP
@@ -201,11 +212,13 @@ graph TB
     style API fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
     style MQTT_OUT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
     style APP fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
-    style DRV1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
-    style DRV2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style UART_DRV fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style USB_DRV fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style I2C_DRV fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style PA1 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
     style PA2 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
     style PA3 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style PA4 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
 ```
 
 ### 2. 疎結合化による効果
@@ -242,21 +255,23 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph "開発対象1：Driver Library（Raspberry Pi 4専用）"
+    subgraph "開発対象1：汎用通信Driver Library（Raspberry Pi 4専用）"
         subgraph "Hardware Layer"
-            HW1[BravePI/JIG<br/>UART/USB Serial<br/>38400ボー・バイナリフレーム]
-            HW2[I2C Sensors<br/>温度・湿度・圧力等<br/>I2C Bus・Raw Binary]
-            HW3[Modbus Devices<br/>産業機器<br/>RS485・Modbus RTU]
+            HW1[BravePI<br/>UART /dev/ttyAMA0<br/>38400ボー・バイナリフレーム]
+            HW2[BraveJIG<br/>USB Serial /dev/ttyACM0-9<br/>38400ボー・バイナリフレーム]
+            HW3[I2C Sensors<br/>温度・湿度・圧力等<br/>I2C Bus・Raw Binary]
+            HW4[Modbus Devices<br/>産業機器<br/>RS485・Modbus RTU]
         end
         
-        subgraph "Driver Libraries（RPi4専用実装）"
-            DRV1[BravePI Driver Library<br/>bravepi_driver.py<br/>🔒 RPi4 GPIO/UART依存]
-            DRV2[I2C Driver Library<br/>i2c_driver.py<br/>🔒 RPi4 I2C依存]
-            DRV3[Modbus Driver Library<br/>modbus_driver.py<br/>🔒 RPi4 USB-RS485依存]
+        subgraph "汎用通信Driver Libraries（RPi4専用実装）"
+            DRV1[UART Driver<br/>uart_driver.py<br/>🔒 RPi4 UART制御のみ]
+            DRV2[USB Serial Driver<br/>usb_serial_driver.py<br/>🔒 RPi4 USB制御のみ]
+            DRV3[I2C Driver<br/>i2c_driver.py<br/>🔒 RPi4 I2C制御のみ]
+            DRV4[Modbus Driver<br/>modbus_driver.py<br/>🔒 RPi4 RS485制御のみ]
         end
         
-        subgraph "MQTT Publisher"
-            PUB1[MQTT Client<br/>センサーデータをJSON変換<br/>Topic: sensors/device/type]
+        subgraph "Raw MQTT Publisher"
+            PUB1[MQTT Client<br/>生データのみ配信<br/>Topic: raw/uart, raw/usb_serial, raw/i2c]
         end
     end
     
@@ -269,10 +284,11 @@ graph TB
             SUB[MQTT Client<br/>全センサートピック購読<br/>リアルタイム受信]
         end
         
-        subgraph "Protocol Adapters"
-            PA1[BravePI Protocol Adapter<br/>バイナリフレーム→統一JSON]
-            PA2[Standard JSON Adapter<br/>JSON正規化・検証]
-            PA3[Legacy Protocol Adapter<br/>既存フォーマット対応]
+        subgraph "Protocol Adapters（プロトコル固有処理）"
+            PA1[BravePI Protocol Adapter<br/>バイナリフレーム解析→統一JSON<br/>メッセージタイプ処理]
+            PA2[BraveJIG Protocol Adapter<br/>JIG固有センサー処理→統一JSON<br/>高精度データ処理]
+            PA3[Standard JSON Adapter<br/>JSON正規化・検証]
+            PA4[Legacy Protocol Adapter<br/>既存フォーマット対応]
         end
         
         subgraph "Universal API"
@@ -283,46 +299,56 @@ graph TB
     HW1 --> DRV1 --> PUB1
     HW2 --> DRV2 --> PUB1
     HW3 --> DRV3 --> PUB1
+    HW4 --> DRV4 --> PUB1
     
-    PUB1 -.->|MQTT Publish| BROKER
+    PUB1 -.->|Raw MQTT Publish| BROKER
     BROKER -.->|MQTT Subscribe| SUB
     
     SUB --> PA1
     SUB --> PA2
     SUB --> PA3
+    SUB --> PA4
     
     PA1 --> API
     PA2 --> API
     PA3 --> API
+    PA4 --> API
     
     style DRV1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style DRV2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style DRV3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style DRV4 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style BROKER fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
     style PA1 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
     style PA2 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
     style PA3 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style PA4 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
     style API fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
-#### 開発対象1：Driver Library 仕様（初期実装：Raspberry Pi 4依存）
+#### 開発対象1：汎用通信Driver Library仕様（初期実装：Raspberry Pi 4依存）
 
-| ハードウェア | Driver Library | 物理制御 | MQTT出力 | 依存ライブラリ | プラットフォーム依存 |
-|-------------|----------------|----------|----------|---------------|------------------|
-| **BravePI/JIG** | `bravepi_driver.py` | UART/USB Serial制御<br/>38400ボー | バイナリフレーム解析<br/>→JSON変換<br/>→MQTT Publish | `pyserial`<br/>`paho-mqtt` | **RPi4**: `/dev/ttyAMA0`<br/>GPIO制御依存 |
-| **I2C Sensors** | `i2c_driver.py` | I2C Bus制御<br/>レジスタ読み書き | センサー値読み取り<br/>→JSON変換<br/>→MQTT Publish | `smbus2`<br/>`paho-mqtt` | **RPi4**: `/dev/i2c-1`<br/>GPIO・I2C依存 |
-| **Modbus Devices** | `modbus_driver.py` | RS485制御<br/>RTU/TCP通信 | Modbus応答解析<br/>→JSON変換<br/>→MQTT Publish | `pymodbus`<br/>`paho-mqtt` | **RPi4**: USB-RS485<br/>GPIO制御依存 |
+| 通信方式 | Driver Library | 物理制御 | Raw MQTT出力 | 依存ライブラリ | プラットフォーム依存 |
+|----------|----------------|----------|-------------|---------------|------------------|
+| **UART** | `uart_driver.py` | UART制御のみ<br/>38400ボー設定 | 生バイナリデータ<br/>→Raw MQTT Publish<br/>Topic: `raw/uart/data` | `pyserial`<br/>`paho-mqtt` | **RPi4**: `/dev/ttyAMA0`<br/>GPIO制御依存 |
+| **USB Serial** | `usb_serial_driver.py` | USB Serial制御のみ<br/>38400ボー設定 | 生バイナリデータ<br/>→Raw MQTT Publish<br/>Topic: `raw/usb_serial/data` | `pyserial`<br/>`paho-mqtt` | **RPi4**: `/dev/ttyACM0-9`<br/>USB制御依存 |
+| **I2C** | `i2c_driver.py` | I2C Bus制御のみ<br/>レジスタ読み書き | 生バイナリデータ<br/>→Raw MQTT Publish<br/>Topic: `raw/i2c/data` | `smbus2`<br/>`paho-mqtt` | **RPi4**: `/dev/i2c-1`<br/>I2C制御依存 |
+| **RS485/Modbus** | `modbus_driver.py` | RS485制御のみ<br/>RTU通信 | 生バイナリデータ<br/>→Raw MQTT Publish<br/>Topic: `raw/modbus/data` | `pymodbus`<br/>`paho-mqtt` | **RPi4**: USB-RS485<br/>制御依存 |
 
-⚠️ **初期実装の制約**: Driver LibraryはRaspberry Pi 4の物理インターフェース（GPIO、UART、I2C）に依存します。
-他のプラットフォーム（PC、組み込みLinux等）への移植は将来対応予定です。
+⚠️ **汎用通信層の特徴**: Driver Libraryは通信制御のみを担当し、**プロトコル解析は一切行いません**。
+BravePI/JIG固有の処理は全てGateway側のProtocol Adapterで実装します。
 
-#### 開発対象2：Universal Gateway 仕様
+#### 開発対象2：Universal Gateway Protocol Adapter仕様
 
-| コンポーネント | ファイル | 機能 | 入力 | 出力 |
-|---------------|----------|------|------|------|
-| **BravePI Protocol Adapter** | `bravepi_protocol_adapter.py` | バイナリフレーム解析<br/>メッセージタイプ処理 | MQTT Topic<br/>`sensors/bravepi/+/+` | 統一JSON |
-| **Standard JSON Adapter** | `json_adapter.py` | JSON正規化・検証<br/>フィールド統一 | MQTT Topic<br/>`sensors/esp32/+/+` | 統一JSON |
-| **Legacy Protocol Adapter** | `legacy_adapter.py` | 既存フォーマット対応<br/>後方互換性 | MQTT Topic<br/>`sensors/legacy/+/+` | 統一JSON |
+| Protocol Adapter | ファイル | 機能 | Raw MQTT入力 | 統一JSON出力 |
+|------------------|----------|------|-------------|-------------|
+| **BravePI Protocol Adapter** | `bravepi_protocol_adapter.py` | バイナリフレーム解析<br/>メッセージタイプ処理<br/>16センサータイプ対応 | Raw MQTT Topic<br/>`raw/uart/data` | 統一JSON<br/>BravePI固有処理済み |
+| **BraveJIG Protocol Adapter** | `bravejig_protocol_adapter.py` | JIG専用センサー処理<br/>高精度データ処理<br/>JIG拡張センサー対応 | Raw MQTT Topic<br/>`raw/usb_serial/data` | 統一JSON<br/>BraveJIG固有処理済み |
+| **Standard JSON Adapter** | `json_adapter.py` | JSON正規化・検証<br/>フィールド統一 | Raw MQTT Topic<br/>`raw/json/data` | 統一JSON<br/>正規化済み |
+| **Legacy Protocol Adapter** | `legacy_adapter.py` | 既存フォーマット対応<br/>後方互換性 | Raw MQTT Topic<br/>`raw/legacy/data` | 統一JSON<br/>互換性確保 |
+
+⚠️ **Protocol Adapterの特徴**: ハードウェア固有のプロトコル解析・データ変換を全て担当します。
+Driver Libraryからの生データを受け取り、統一JSON形式に変換して出力します。
 
 #### 新規ハードウェア対応手順
 
@@ -332,26 +358,27 @@ graph LR
         NEW_HW[新しいハードウェア<br/>例：Siemens PLC]
     end
     
-    subgraph "Driver Library開発"
-        STEP1[Driver Library作成<br/>siemens_driver.py]
-        STEP2[物理制御実装<br/>S7通信プロトコル]
-        STEP3[データ変換実装<br/>PLC→JSON]
-        STEP4[MQTT Publisher実装<br/>Topic設計]
+    subgraph "汎用通信Driver開発"
+        STEP1[通信Driver作成<br/>ethernet_driver.py]
+        STEP2[物理制御実装<br/>Ethernet通信のみ]
+        STEP3[Raw データ配信<br/>プロトコル解析なし]
+        STEP4[Raw MQTT Publisher<br/>Topic: raw/ethernet/data]
     end
     
-    subgraph "Gateway対応"
+    subgraph "Protocol Adapter開発"
         STEP5[Protocol Adapter追加<br/>siemens_protocol_adapter.py]
-        STEP6[MQTT Topic購読設定<br/>sensors/siemens/+/+]
+        STEP6[S7プロトコル解析実装<br/>PLC→統一JSON変換]
+        STEP7[Raw MQTT Subscribe設定<br/>raw/ethernet/data購読]
     end
     
     subgraph "統合・テスト"
-        STEP7[E2Eテスト<br/>実機→MQTT→Gateway]
-        STEP8[本番配備<br/>工場ライン投入]
+        STEP8[E2Eテスト<br/>実機→Raw MQTT→Gateway]
+        STEP9[本番配備<br/>工場ライン投入]
     end
     
     NEW_HW --> STEP1 --> STEP2 --> STEP3 --> STEP4
-    STEP4 --> STEP5 --> STEP6
-    STEP6 --> STEP7 --> STEP8
+    STEP4 --> STEP5 --> STEP6 --> STEP7
+    STEP7 --> STEP8 --> STEP9
     
     style NEW_HW fill:#e9ecef,stroke:#000,stroke-width:2px,color:#000
     style STEP1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
@@ -360,26 +387,30 @@ graph LR
     style STEP4 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
     style STEP5 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
     style STEP6 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
-    style STEP8 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+    style STEP7 fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style STEP9 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
 **新規ハードウェア対応手順**:
-1. **Driver Library作成** (siemens_driver.py) - ベアメタル環境用
-2. **物理制御実装** (S7通信プロトコル) - ハードウェア固有処理
-3. **データ変換実装** (PLC→JSON) - 統一フォーマット変換
-4. **MQTT Publisher実装** (Topic設計) - sensors/siemens/device/type
+1. **汎用通信Driver作成** (ethernet_driver.py) - ベアメタル環境用
+2. **物理制御実装** (Ethernet通信のみ) - 通信制御のみ
+3. **Rawデータ配信** (プロトコル解析なし) - 生データ転送のみ
+4. **Raw MQTT Publisher** (raw/ethernet/data) - 生データ配信
 5. **Protocol Adapter追加** (siemens_protocol_adapter.py) - Gateway側
-6. **MQTT Topic購読設定** - Gateway設定更新
-7. **E2Eテスト** (実機→MQTT→Gateway) - 統合動作確認
-8. **本番配備** (工場ライン投入) - 運用開始
+6. **S7プロトコル解析実装** (PLC→統一JSON変換) - ハードウェア固有処理
+7. **Raw MQTT Subscribe設定** (raw/ethernet/data購読) - Gateway設定
+8. **E2Eテスト** (実機→Raw MQTT→Gateway) - 統合動作確認
+9. **本番配備** (工場ライン投入) - 運用開始
 
 **開発期間**: 
-- Driver Library: **1週間** (既存BravePIライブラリをベース、**RPi4専用**)
-- Gateway対応: **2-3日** (設定追加のみ、ハードウェア非依存)
+- **汎用通信Driver**: **3-4日** (通信制御のみ、プロトコル解析なし)
+- **Protocol Adapter**: **1週間** (ハードウェア固有のプロトコル処理)
 - **総計 1-2週間** で完成（従来の3-6ヶ月から大幅短縮）
 
-**⚠️ 初期制約**: Driver Libraryは**Raspberry Pi 4 専用**実装となります。
-他のプラットフォーム（PC、組み込みLinux）対応は段階的移植として将来実装予定です。
+**🎯 設計の利点**: 
+- **汎用Driver**: 他のEthernet機器でも流用可能
+- **Protocol Adapter**: ハードウェア固有知識を集約
+- **完全分離**: 通信層とプロトコル層の責務が明確
 
 ### 2. Universal Gateway 出力仕様（工場・現場向け）
 
