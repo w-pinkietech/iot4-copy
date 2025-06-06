@@ -210,55 +210,110 @@ graph LR
 
 ## Gatewayによる解決アプローチ
 
-### 1. Gateway のコアコンセプト
+### 1. Gateway のコアコンセプト（ハードウェアドライバ構成）
 
 ```mermaid
-graph LR
-    subgraph "入力：多様なプロトコル"
-        INPUT1[BravePI<br/>バイナリプロトコル<br/>38400baud]
-        INPUT2[ESP32<br/>WiFi JSON]
-        INPUT3[Arduino<br/>Serial ASCII]
-        INPUT4[MQTT Device<br/>JSON Message]
+graph TB
+    subgraph "入力：多様なハードウェア"
+        INPUT1[BravePI<br/>UART 38400baud<br/>バイナリプロトコル]
+        INPUT2[ESP32<br/>WiFi TCP/HTTP<br/>JSON形式]
+        INPUT3[Arduino<br/>USB Serial<br/>ASCII形式]
+        INPUT4[Generic I2C<br/>I2C Bus<br/>Raw Binary]
+        INPUT5[Modbus Device<br/>RS485/TCP<br/>Modbus RTU/TCP]
     end
     
-    subgraph "Gateway：プロトコル変換"
-        subgraph "Parser Layer"
-            P1[BravePI Parser]
-            P2[ESP32 Parser]
-            P3[Arduino Parser]
-            P4[MQTT Parser]
+    subgraph "Gateway：ハードウェアドライバ層"
+        subgraph "Hardware Drivers"
+            D1[BravePI Driver<br/>bravepi_driver.py]
+            D2[ESP32 Driver<br/>esp32_driver.py]
+            D3[Arduino Driver<br/>arduino_driver.py]
+            D4[I2C Driver<br/>i2c_driver.py]
+            D5[Modbus Driver<br/>modbus_driver.py]
         end
         
-        subgraph "Transformer Layer"
-            T[Universal Transformer<br/>統一データ形式生成]
+        subgraph "Protocol Parsers"
+            P1[Binary Parser<br/>struct.unpack()]
+            P2[JSON Parser<br/>json.loads()]
+            P3[ASCII Parser<br/>str.decode()]
+            P4[I2C Parser<br/>smbus2]
+            P5[Modbus Parser<br/>pymodbus]
         end
         
-        subgraph "Validator Layer"
-            V[Data Validator<br/>品質・整合性チェック]
+        subgraph "Universal Converter"
+            CONV[Hardware Abstraction<br/>統一データ形式変換]
         end
     end
     
-    subgraph "出力：統一JSON形式"
+    subgraph "出力：統一インターフェース"
         OUTPUT["Universal JSON<br/>deviceId: xxx<br/>sensorType: temperature<br/>value: 25.5<br/>unit: ℃<br/>timestamp: 2025-06-06T10:30:00Z"]
     end
     
-    INPUT1 --> P1
-    INPUT2 --> P2
-    INPUT3 --> P3
-    INPUT4 --> P4
+    INPUT1 --> D1 --> P1
+    INPUT2 --> D2 --> P2  
+    INPUT3 --> D3 --> P3
+    INPUT4 --> D4 --> P4
+    INPUT5 --> D5 --> P5
     
-    P1 --> T
-    P2 --> T
-    P3 --> T
-    P4 --> T
+    P1 --> CONV
+    P2 --> CONV
+    P3 --> CONV
+    P4 --> CONV
+    P5 --> CONV
     
-    T --> V
-    V --> OUTPUT
+    CONV --> OUTPUT
     
-    style T fill:#fab005,stroke:#000,stroke-width:2px,color:#000
-    style V fill:#fab005,stroke:#000,stroke-width:2px,color:#000
+    style D1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style D2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style D3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style D4 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style D5 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style CONV fill:#fab005,stroke:#000,stroke-width:2px,color:#000
     style OUTPUT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
+
+#### ハードウェア別ドライバ仕様
+
+| ハードウェア | ドライバファイル | 通信方式 | 主な機能 | 依存ライブラリ |
+|-------------|----------------|----------|----------|---------------|
+| **BravePI/JIG** | `bravepi_driver.py` | UART Serial | バイナリフレーム解析<br/>16センサータイプ対応 | `pyserial` |
+| **ESP32** | `esp32_driver.py` | WiFi TCP/HTTP | JSON形式データ取得<br/>設定配信 | `requests`<br/>`aiohttp` |
+| **Arduino** | `arduino_driver.py` | USB Serial | ASCII形式データ解析<br/>シンプルプロトコル | `pyserial` |
+| **I2C Generic** | `i2c_driver.py` | I2C Bus | 直接I2Cセンサー制御<br/>温度・湿度・圧力等 | `smbus2`<br/>`adafruit-circuitpython` |
+| **Modbus** | `modbus_driver.py` | RS485/TCP | 産業用Modbus機器<br/>RTU/TCP対応 | `pymodbus` |
+
+#### 新規ハードウェアドライバ追加手順
+
+```mermaid
+graph LR
+    subgraph "新ハードウェア追加"
+        NEW_HW[新しいハードウェア<br/>例：Siemens PLC]
+    end
+    
+    subgraph "ドライバ開発"
+        STEP1[1. ドライバファイル作成<br/>siemens_driver.py]
+        STEP2[2. 通信プロトコル実装<br/>S7通信]
+        STEP3[3. データパーサー実装<br/>PLC形式→JSON]
+        STEP4[4. 設定ファイル更新<br/>config.yaml]
+    end
+    
+    subgraph "統合・テスト"
+        STEP5[5. Gateway登録<br/>driver_manager.py]
+        STEP6[6. 動作テスト<br/>実機確認]
+        STEP7[7. 本番配備<br/>工場ライン投入]
+    end
+    
+    NEW_HW --> STEP1 --> STEP2 --> STEP3 --> STEP4
+    STEP4 --> STEP5 --> STEP6 --> STEP7
+    
+    style NEW_HW fill:#e9ecef,stroke:#000,stroke-width:2px,color:#000
+    style STEP1 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style STEP2 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style STEP3 fill:#ffd43b,stroke:#000,stroke-width:2px,color:#000
+    style STEP7 fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
+```
+
+**新規ドライバ開発期間**: 既存のBravePIドライバをベースに **1-2週間** で完成
+（従来の3-6ヶ月から大幅短縮）
 
 ### 2. Gateway出力後の通信規格（工場・現場向けドライバ）
 
