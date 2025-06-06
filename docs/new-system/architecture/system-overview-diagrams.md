@@ -260,7 +260,12 @@ graph LR
     style OUTPUT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
 ```
 
-### 2. Gateway出力後の通信規格
+### 2. Gateway出力後の通信規格（工場・現場向けドライバ）
+
+**ドライバとしての設計方針**: 
+- **シンプル・確実**: 複雑な機能は排除、基本機能に特化
+- **工場標準**: 製造業で実績のある通信方式のみ採用
+- **保守性重視**: 故障リスク最小化、トラブル時の対応容易性
 
 ```mermaid
 graph TB
@@ -268,77 +273,54 @@ graph TB
         GW_OUT[統一JSON形式<br/>Universal Sensor Data]
     end
     
-    subgraph "通信規格・配信方式"
-        REST[REST API<br/>HTTP/HTTPS]
-        WS[WebSocket<br/>リアルタイム配信]
-        MQTT_OUT[MQTT Publish<br/>Broker経由配信]
-        SSE[Server-Sent Events<br/>HTTP長時間接続]
+    subgraph "ドライバ通信方式"
+        REST[REST API<br/>HTTP/HTTPS<br/>基本データ取得・設定]
+        MQTT_OUT[MQTT<br/>工場内軽量通信<br/>データ配信]
     end
     
-    subgraph "受信システム・デバイス"
-        WEB_APP[Webアプリケーション<br/>JavaScript/React]
-        MOBILE[モバイルアプリ<br/>Android/iOS]
-        OTHER_IOT[他社IoTプラットフォーム<br/>AWS IoT/Azure IoT]
-        ANALYTICS[分析システム<br/>Machine Learning]
-        STORAGE[時系列データベース<br/>InfluxDB/TimescaleDB]
-        ALERT[アラートシステム<br/>Slack/Email通知]
+    subgraph "工場・現場システム"
+        SCADA[SCADA システム<br/>工場監視制御]
+        MES[MES<br/>製造実行システム]
+        HMI[HMI<br/>操作画面・監視画面]
+        PLC[PLC・FA機器<br/>制御システム連携]
+        LOGGER[データロガー<br/>ローカル記録]
     end
     
     GW_OUT --> REST
-    GW_OUT --> WS
     GW_OUT --> MQTT_OUT
-    GW_OUT --> SSE
     
-    REST --> WEB_APP
-    REST --> OTHER_IOT
-    REST --> ANALYTICS
+    REST --> SCADA
+    REST --> MES
+    REST --> HMI
     
-    WS --> WEB_APP
-    WS --> MOBILE
-    
-    MQTT_OUT --> OTHER_IOT
-    MQTT_OUT --> ANALYTICS
-    MQTT_OUT --> ALERT
-    
-    SSE --> WEB_APP
-    SSE --> STORAGE
+    MQTT_OUT --> PLC
+    MQTT_OUT --> LOGGER
+    MQTT_OUT --> HMI
     
     style GW_OUT fill:#51cf66,stroke:#fff,stroke-width:2px,color:#000
     style REST fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
-    style WS fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
     style MQTT_OUT fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
-    style SSE fill:#74c0fc,stroke:#000,stroke-width:2px,color:#000
 ```
 
-#### 通信規格の詳細
+#### 工場・現場での通信規格
 
-| 通信方式 | プロトコル | 用途 | 特徴 |
-|----------|-----------|------|------|
-| **REST API** | HTTP/HTTPS | 一般的なWebアプリ連携 | • 同期通信<br/>• ポーリング可能<br/>• 標準的 |
-| **WebSocket** | WS/WSS | リアルタイム配信 | • 双方向通信<br/>• 低レイテンシ<br/>• 常時接続 |
-| **MQTT** | MQTT v3.1.1/v5.0 | IoTデバイス間通信 | • 軽量プロトコル<br/>• QoS対応<br/>• Pub/Sub |
-| **Server-Sent Events** | HTTP | 一方向リアルタイム | • HTTP互換<br/>• 自動再接続<br/>• 簡単実装 |
+| 通信方式 | 用途 | 工場での利用例 | 信頼性 |
+|----------|------|-------------|--------|
+| **REST API** | 基本的なデータ取得・設定 | • SCADA からのデータ取得<br/>• MES との連携<br/>• 設定変更・状態確認 | ★★★ |
+| **MQTT** | 軽量リアルタイム通信 | • PLC への状態通知<br/>• 工場内ネットワーク配信<br/>• ローカルログ記録 | ★★★ |
 
-#### 実装例
+#### 実装例（工場向け）
 
 ```yaml
-# REST API エンドポイント
-GET  /api/v1/sensors/latest        # 最新データ取得
-POST /api/v1/sensors/{id}/config   # センサー設定
-GET  /api/v1/devices               # デバイス一覧
+# REST API（シンプル・確実）
+GET  /api/sensor/{device_id}/value     # センサー値取得
+POST /api/sensor/{device_id}/config    # 設定変更
+GET  /api/status                       # システム状態確認
 
-# WebSocket エンドポイント  
-WS   /ws/sensor-stream             # リアルタイムデータ配信
-WS   /ws/device/{id}/control       # デバイス制御
-
-# MQTT トピック
-Topic: sensors/{deviceId}/{sensorType}/data    # データ配信
-Topic: sensors/{deviceId}/config               # 設定配信
-Topic: alerts/{deviceId}/{alertType}           # アラート配信
-
-# Server-Sent Events
-GET  /events/sensor-stream         # イベントストリーム
-GET  /events/alerts                # アラートストリーム
+# MQTT（工場標準）  
+Topic: factory/line1/{device_id}/data        # ライン1データ
+Topic: factory/line1/{device_id}/status      # デバイス状態
+Topic: factory/alerts/{alert_level}          # アラート通知
 ```
 
 ### 3. BravePI専用プロトコル変換の詳細
