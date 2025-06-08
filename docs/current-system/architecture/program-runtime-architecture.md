@@ -143,6 +143,160 @@ sequenceDiagram
     NR->>MQTT: JSON形式で配信
 ```
 
+### 4. BravePI接続種別の判別方法
+
+BravePIから送信されるデータの接続種別（BLE接続か有線接続か）を判別する方法は、システムの重要な機能の1つです。
+
+#### アクセスタイプによる判別
+
+最も確実な判別方法は、**アクセスタイプ（access_type）フィールド**を使用することです。
+
+| アクセスタイプ | 値 | 接続方式 | 説明 |
+|--------------|---|----------|------|
+| Bluetooth | 0 | 無線 | BravePI経由のBLEセンサー |
+| I2C | 1 | 有線 | 直接I2C接続センサー |
+| LAN | 3 | ネットワーク | イーサネット接続デバイス |
+| USB | 4 | 有線 | BraveJIG経由のUSBセンサー |
+
+#### データベースでの管理
+
+```sql
+-- MariaDBのdevicesテーブル
+CREATE TABLE devices (
+    device_number VARCHAR(16) PRIMARY KEY,
+    access_type TINYINT,  -- 0=Bluetooth, 1=I2C, 3=LAN, 4=USB
+    sensor_type INT,
+    -- その他のフィールド
+);
+
+-- sensor_registryテーブル
+CREATE TABLE sensor_registry (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    device_id VARCHAR(16),
+    access_type INT,  -- アクセスタイプを記録
+    -- その他のフィールド
+);
+```
+
+#### Node-REDでの実装
+
+```javascript
+// アクセスタイプの定義
+const ACCESS_TYPES = {
+    BLUETOOTH: 0,   // BravePI BLEセンサー
+    I2C: 1,         // I2C直接接続
+    LAN: 3,         // ネットワーク接続
+    USB: 4          // BraveJIG USB接続
+};
+
+// 接続種別の判別関数
+function determineConnectionType(frameData) {
+    // 1. アクセスタイプフィールドを確認（最優先）
+    if (frameData.access_type !== undefined) {
+        switch (frameData.access_type) {
+            case ACCESS_TYPES.BLUETOOTH:
+                return "BLE";
+            case ACCESS_TYPES.I2C:
+                return "I2C";
+            case ACCESS_TYPES.LAN:
+                return "LAN";
+            case ACCESS_TYPES.USB:
+                return "USB";
+        }
+    }
+    
+    // 2. メタデータから判別（補助的）
+    if (frameData.metadata) {
+        // RSSI値やバッテリーレベルがあればBLE
+        if (frameData.metadata.rssi || frameData.metadata.battery_level) {
+            return "BLE";
+        }
+        // GPIO pin情報があればGPIO有線接続
+        if (frameData.metadata.gpio_pin !== undefined) {
+            return "GPIO";
+        }
+    }
+    
+    // 3. センサータイプから推測（最後の手段）
+    const sensorType = frameData.sensor_type;
+    if (sensorType) {
+        // GPIO入出力
+        if (sensorType === 257 || sensorType === 258) {
+            return "GPIO";
+        }
+        // I2Cセンサー群
+        if ([259, 260, 261, 262, 263, 264].includes(sensorType)) {
+            return "I2C";
+        }
+    }
+    
+    return "Unknown";
+}
+```
+
+#### メタデータによる判別
+
+BravePIプラグイン実装では、接続種別に応じて異なるメタデータが含まれます：
+
+```python
+# BLE接続の場合のメタデータ
+metadata_ble = {
+    "rssi": -45,                    # 信号強度（dBm）
+    "battery_level": 85,            # バッテリー残量（%）
+    "connection_type": "bluetooth_le",
+    "bluetooth_address": "AA:BB:CC:DD:EE:FF"
+}
+
+# GPIO接続の場合のメタデータ
+metadata_gpio = {
+    "connection_type": "gpio",
+    "gpio_pin": 17,                 # GPIOピン番号
+    "pull_resistor": "pull_up"      # プルアップ/プルダウン設定
+}
+
+# I2C接続の場合のメタデータ
+metadata_i2c = {
+    "connection_type": "i2c",
+    "i2c_address": "0x19",          # I2Cアドレス
+    "i2c_bus": 1                    # I2Cバス番号
+}
+```
+
+#### センサータイプと接続方式の対応
+
+| センサータイプ | 型番 | 主な接続方式 | 備考 |
+|--------------|------|-------------|------|
+| 257 | 接点入力 | GPIO/BLE | BravePIのGPIOまたはBLE |
+| 258 | 接点出力 | GPIO | BravePIのGPIO |
+| 259 | ADC (MCP3427) | I2C | 直接接続 |
+| 260 | 測距 (VL53L1X) | I2C | 直接接続 |
+| 261 | 熱電対 (MCP9600) | I2C/BLE | 両方の可能性あり |
+| 262 | 加速度 (LIS2DUXS12) | I2C/BLE | 両方の可能性あり |
+| 263 | 差圧 (SDP810) | I2C | 直接接続 |
+| 264 | 照度 (OPT3001) | I2C | 直接接続 |
+| 291 | 温湿度 | BLE/USB | BLEまたはBraveJIG経由 |
+
+#### 実装上の注意点
+
+1. **優先順位の遵守**
+   - 必ずaccess_typeフィールドを最優先で確認
+   - メタデータは補助的な判別材料として使用
+   - センサータイプのみでの判別は避ける
+
+2. **エラーハンドリング**
+   ```javascript
+   if (connectionType === "Unknown") {
+       console.warn(`Unable to determine connection type for device ${frameData.device_number}`);
+       // デフォルト処理またはエラー通知
+   }
+   ```
+
+3. **パフォーマンス考慮**
+   - 接続種別の判別結果をキャッシュして再利用
+   - 頻繁なデータベースアクセスを避ける
+
+この接続種別判別機能により、システムは異なる接続方式のセンサーを適切に識別し、それぞれに最適な処理を実行できます。
+
 ## データフォーマット
 
 ### 1. Pythonドライバー出力（JSON）
