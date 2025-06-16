@@ -1,0 +1,18 @@
+3から4になるときにnode-redを変える機会があった。
+変更があるたびに全変更。
+braveリッジさんがベンダーさんと組んで設置とかをやり始めてる。パートナーになると割引
+
+ドキュメント
+nodeのバージョン
+無線の情報を追加
+jigはusbとイーサもある
+lanがudp通信, iot導入支援キットが場所を知らせる
+jig専用のbrokerがある、secondary brokerはjig専用、id passなし
+primary brokerはiotkit
+mariadb pass iotkit-password
+iot導入支援キットの名前を変えるかも
+研究契約を結ぶ、主体性があると問題
+braveリッジさんとチャット
+vmwareの認識
+noderedダッシュボードをangularjs
+bravepiの設定uartからやれる。通信仕様書、通信コマンドがある。

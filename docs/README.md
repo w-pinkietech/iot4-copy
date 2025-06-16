@@ -12,6 +12,7 @@ Node-RED + BravePI/JIG + MariaDB/InfluxDBで構成される現在のシステム
 - **[アーキテクチャ](current-system/architecture/)**: システム全体設計、BravePI/JIG統合詳細
 - **[技術分析](current-system/analysis/)**: 性能分析、課題分析
 - **[API仕様](current-system/api/)**: 既存エンドポイント仕様
+- **[リファレンス](current-system/reference/)**: ハードウェア/ソフトウェア仕様
 
 ### 🚀 [新システム](new-system/)
 Python/FastAPI + Streamlit + Grafanaで構成される新しいシステム
@@ -19,34 +20,9 @@ Python/FastAPI + Streamlit + Grafanaで構成される新しいシステム
 - **[アーキテクチャ](new-system/architecture/)**: 3層分散アーキテクチャ設計
 - **[実装詳細](new-system/implementation/)**: SQLite設計、MQTT仕様、セキュリティ
 - **[API仕様](new-system/api/)**: REST API、メッセージフォーマット
-
-### 🔄 [移行計画](migration/)
-現行システムから新システムへの移行戦略
-
-- **[戦略](migration/strategy/)**: 移行方針、フェーズ計画、リスク評価
-- **[手順](migration/procedures/)**: データ移行、テスト、デプロイメント
-- **[検証](migration/validation/)**: 互換性テスト、性能検証
-
-### ⚙️ [運用](operations/)
-システムの構築、運用、保守に関するドキュメント
-
-- **[インストール](operations/installation/)**: システム要件、構築手順
-- **[保守](operations/maintenance/)**: 監視、バックアップ、トラブルシューティング
-- **[セキュリティ](operations/security/)**: アクセス制御、セキュリティ手順
-
-### 📋 [設計プロセス](design/)
-設計検討プロセスと意思決定の記録
-
-- **[レビュー](design/reviews/)**: 設計レビューチェックリスト、決定記録
-- **[研究](design/research/)**: 技術評価、代替案分析
-- **[プロトタイプ](design/prototypes/)**: PoC結果
-
-### 📚 [リファレンス](reference/)
-技術仕様、用語集などの参考資料
-
-- **[ハードウェア](reference/hardware/)**: BravePI/JIG仕様、センサーカタログ
-- **[ソフトウェア](reference/software/)**: 依存関係、設定リファレンス
-- **[用語集](reference/glossary.md)**: 専門用語の定義
+- **[運用](new-system/operations/)**: インストール、保守、セキュリティ
+- **[設計プロセス](new-system/design/)**: 設計レビュー、研究、プロトタイプ
+- **[リファレンス](new-system/reference/)**: ハードウェア/ソフトウェア仕様
 
 ## クイックスタート
 
@@ -60,15 +36,13 @@ Python/FastAPI + Streamlit + Grafanaで構成される新しいシステム
 2. [アーキテクチャ概要](new-system/architecture/overview.md)
 3. [センサードライバー設計](new-system/architecture/sensor-drivers.md)
 
-### 移行を計画・実行したい方
-1. [移行戦略](migration/strategy/overview.md)
-2. [移行手順](migration/procedures/data-migration.md)
-3. [設計レビューチェックリスト](design/reviews/design-review-checklist.md)
+### 新システムへの移行を検討したい方
+1. [設計レビューチェックリスト](new-system/design/design-review-checklist.md)
+2. [疎結合設計の研究](new-system/design/loose-coupling-research.md)
 
 ### システムを構築・運用したい方
-1. [システム要件](operations/installation/requirements.md)
-2. [構築手順](operations/installation/edge-gateway-setup.md)
-3. [運用ガイド](operations/maintenance/monitoring.md)
+1. [インストール手順](new-system/operations/installation-procedures.md)
+2. [運用ガイド](new-system/operations/README.md)
 
 ## プロジェクト状況
 
@@ -82,8 +56,7 @@ Python/FastAPI + Streamlit + Grafanaで構成される新しいシステム
 
 ### 進行中 🔄
 - ドキュメント体系の再構築
-- 移行戦略の策定
-- 複雑処理（FFT解析等）の移行方法検討
+- 複雑処理（FFT解析等）の実装方法検討
 
 ### 今後の予定 📅
 - 実装フェーズの開始
@@ -94,11 +67,9 @@ Python/FastAPI + Streamlit + Grafanaで構成される新しいシステム
 
 このプロジェクトでは、ドキュメントの整理と再構築を実施しています：
 
-- **目的別整理**: 現状分析、新設計、移行、運用を明確に分離
-- **読み手別対応**: 開発者、運用者、マネージャー向けに最適化
+- **シンプルな構造**: 現行システムと新システムの2つに集約
+- **関連情報の統合**: 運用、設計、リファレンス情報を各システム配下に整理
 - **ナビゲーション改善**: 階層的な構造で情報アクセスを改善
-
-詳細は[再構築計画](REORGANIZATION_PLAN.md)をご覧ください。
 
 ## 貢献
 
