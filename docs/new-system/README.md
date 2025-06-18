@@ -1,50 +1,65 @@
-# 新システム（Python/FastAPI）
+# IoTセンサー収集システム - 新アーキテクチャ構想
 
 ## 概要
 
-本ディレクトリには、新しく設計されたPython/FastAPIベースのIoTシステムに関するドキュメントを格納しています。
+本プロジェクトは、センサーやエッジデバイスを種類やメーカーを問わず"なんでも"つなげられるIoTプラットフォームの構想です。日本各地で多様なエッジデバイスの研究開発が進む中、それらの成果を活かせるOSSやコミュニティが存在しないという課題を解決し、誰もが参加できる共通基盤を目指します。
 
-## システム概要
+現在のNode-REDベースのIoTシステムを、よりシンプルで保守しやすいPython/FastAPIベースのシステムに再設計する構想です。
 
-- **メインプラットフォーム**: Python + FastAPI + Streamlit
-- **ハードウェア**: 既存のBravePI/JIGを継続利用
-- **データベース**: SQLite (エッジ) + InfluxDB (時系列)
-- **通信**: MQTT + REST API
-- **アーキテクチャ**: 3層分散構成（Edge/Collection/Application）
+## 解決したい課題
 
-## ドキュメント構成
+- **複雑性の増大**: Node-REDのフローが1000ノード以上になり、保守が困難
+- **ハードウェア依存**: BravePI/BraveJIGに密結合したシステム
+- **拡張性の限界**: 新しいセンサーやデバイスの追加が大変
+- **AI活用の制限**: ビジュアルプログラミングではAIによる開発支援が難しい
 
-### 要件定義
+## 実現したいこと
 
-- [`requirements/requirements-definition.md`](requirements/requirements-definition.md) - システム要件定義書
+### 1. シンプルな構成
+- 技術スタックを最小限に絞る
+- テキストベースのコードで管理
+- 1人でも保守可能な規模
 
-### アーキテクチャ
+### 2. ハードウェアの疎結合化
+- センサーとシステムを分離
+- プラグイン方式で新デバイス対応
+- ベンダー中立的な設計
 
-- [`architecture/overview.md`](architecture/overview.md) - 新システム全体アーキテクチャ
-- [`architecture/data-transformation-architecture.md`](architecture/data-transformation-architecture.md) - データ変換アーキテクチャ
-- [`architecture/system-overview-diagrams.md`](architecture/system-overview-diagrams.md) - システム概要図解
-- [`architecture/plugin-design.md`](architecture/plugin-design.md) - プラグイン設計アーキテクチャ
-- [`architecture/plugin-design-architecture.md`](architecture/plugin-design-architecture.md) - Plugin Design Architecture (English)
-- [`architecture/sensor-drivers.md`](architecture/sensor-drivers.md) - センサードライバー設計
+### 3. 柔軟なデータ収集
+- MQTT経由の統一インターフェース
+- 自己完結型のメッセージ形式
+- リアルタイムデータ処理
 
-### 実装ガイド
+### 4. 現代的な技術スタック
+- Python/FastAPIベース
+- SQLiteでシンプルなデータ管理
+- Streamlitで設定UI
+- InfluxDBで時系列データ保存
 
-- [`implementation/python-gateway-guide.md`](implementation/python-gateway-guide.md) - Python Gateway実装ガイド
-- [`implementation/database-design.md`](implementation/database-design.md) - データベース設計
-- [`implementation/bravepi-plugin-implementation.md`](implementation/bravepi-plugin-implementation.md) - BravePI プラグイン実装
+## アーキテクチャの特徴
 
-### 運用・設計・リファレンス
+```
+センサー → エッジゲートウェイ → MQTT → データ収集サーバー → 可視化/API
+```
 
-- [`operations/`](operations/) - インストール・運用手順
-- [`design/`](design/) - 設計プロセスとレビュー
-- [`reference/`](reference/) - 技術リファレンス
+- **エッジゲートウェイ**: Raspberry Piでセンサーデータ収集
+- **MQTT通信**: 疎結合なメッセージング
+- **データ収集サーバー**: どこでも動作可能な処理層
+- **統合UI**: Webベースの管理画面
 
-## 現行システムとの違い
+## 期待される効果
 
-| 項目 | 現行システム | 新システム |
-|------|-------------|------------|
-| メインプラットフォーム | Node-RED | Python/FastAPI |
-| エッジDB | SQLite | SQLite |
-| UI | Node-RED Dashboard | Streamlit |
-| 設定管理 | GUI中心 | コード中心 |
-| 保守性 | ビジュアル | テキスト・AI支援 |
+- 保守性の向上
+- 新デバイスへの対応が容易
+- AI支援による開発効率化
+- 将来的なクラウド移行も可能
+
+## 現在の状態
+
+このプロジェクトはまだ構想・アイデア段階です。実装の詳細は今後検討していきます。
+
+## 関連ドキュメント
+
+- [要件定義](requirements/requirements-definition.md)
+- [アーキテクチャ詳細](architecture/)
+- [システム概要図](architecture/system-overview-diagrams.md)
