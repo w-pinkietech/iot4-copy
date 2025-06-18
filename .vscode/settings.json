@@ -1,0 +1,24 @@
+{
+  "cSpell.words": [
+    "UART",
+    "uart",
+    "Mosquitto",
+    "Modbus",
+    "modbus",
+    "pyserial",
+    "paho",
+    "smbus",
+    "pymodbus",
+    "bravepi",
+    "bravejig",
+    "TYPEFF",
+    "TYPEMAP",
+    "SENSORMAP",
+    "CALIB",
+    "NOIMACT"
+  ],
+  "cSpell.language": "en,ja",
+  "cSpell.enableFiletypes": [
+    "markdown"
+  ]
+}
