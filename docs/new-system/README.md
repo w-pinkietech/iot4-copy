@@ -15,21 +15,26 @@
 ## ドキュメント構成
 
 ### 要件定義
+
 - [`requirements/requirements-definition.md`](requirements/requirements-definition.md) - システム要件定義書
 
 ### アーキテクチャ
+
 - [`architecture/overview.md`](architecture/overview.md) - 新システム全体アーキテクチャ
 - [`architecture/data-transformation-architecture.md`](architecture/data-transformation-architecture.md) - データ変換アーキテクチャ
 - [`architecture/system-overview-diagrams.md`](architecture/system-overview-diagrams.md) - システム概要図解
 - [`architecture/plugin-design.md`](architecture/plugin-design.md) - プラグイン設計アーキテクチャ
+- [`architecture/plugin-design-architecture.md`](architecture/plugin-design-architecture.md) - Plugin Design Architecture (English)
 - [`architecture/sensor-drivers.md`](architecture/sensor-drivers.md) - センサードライバー設計
 
 ### 実装ガイド
+
 - [`implementation/python-gateway-guide.md`](implementation/python-gateway-guide.md) - Python Gateway実装ガイド
 - [`implementation/database-design.md`](implementation/database-design.md) - データベース設計
 - [`implementation/bravepi-plugin-implementation.md`](implementation/bravepi-plugin-implementation.md) - BravePI プラグイン実装
 
 ### 運用・設計・リファレンス
+
 - [`operations/`](operations/) - インストール・運用手順
 - [`design/`](design/) - 設計プロセスとレビュー
 - [`reference/`](reference/) - 技術リファレンス
