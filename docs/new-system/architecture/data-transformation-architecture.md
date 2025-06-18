@@ -4,7 +4,7 @@
 
 ## 概要
 
-本設計書は、BravePI/JIG専用バイナリプロトコルを汎用的なJSON形式に変換するデータ変換アーキテクチャの詳細仕様を定義します。現行システムの1017ノードによる密結合構造から、ベンダーニュートラルで拡張可能な疎結合アーキテクチャへの転換を実現します。
+本設計書は、BravePI/JIG専用バイナリプロトコルを汎用的なJSON形式に変換するデータ変換アーキテクチャの概念設計を定義します。現行システムの密結合構造から、ベンダーニュートラルで拡張可能な疎結合アーキテクチャへの転換を実現します。
 
 ## 目次
 1. [アーキテクチャ原則](#アーキテクチャ原則)
@@ -18,57 +18,55 @@
 
 ### 1. 設計方針
 
-```yaml
-コア原則:
-  1. Protocol Agnostic: プロトコル非依存
-  2. Vendor Neutral: ベンダー中立
-  3. Schema Evolution: スキーマ進化対応
-  4. Real-time Processing: リアルタイム処理
-  5. Horizontal Scaling: 水平スケーリング
+#### コア原則
+- **プロトコル非依存**: 特定の通信プロトコルに依存しない設計
+- **ベンダー中立**: 特定メーカーの仕様に依存しない実装
+- **スキーマ進化対応**: データ構造の変更に柔軟に対応
+- **リアルタイム処理**: 低遅延でのデータ変換
+- **水平スケーリング**: 負荷に応じた拡張性
 
-品質要求:
-  - 変換レイテンシ: <10ms
-  - スループット: >10,000 messages/sec
-  - 可用性: 99.9%
-  - データロス: 0%
-  - スキーマ互換性: 後方互換100%
-```
+#### 品質要求
+- 変換レイテンシ: 10ミリ秒以下
+- スループット: 毎秒1万メッセージ以上
+- 可用性: 99.9%
+- データロス: 0%
+- スキーマ互換性: 後方互換100%
 
 ### 2. レイヤード・アーキテクチャ
 
 ```mermaid
 graph TB
-    subgraph "Input Layer (入力層)"
-        SERIAL[Serial/UART]
-        USB[USB Serial]
-        MQTT_IN[MQTT Input]
-        HTTP_IN[HTTP Input]
-        TCP[TCP Socket]
+    subgraph "入力層"
+        SERIAL[シリアル/UART]
+        USB[USBシリアル]
+        MQTT_IN[MQTT入力]
+        HTTP_IN[HTTP入力]
+        TCP[TCPソケット]
     end
     
-    subgraph "Protocol Layer (プロトコル層)"
-        PARSER[Protocol Parser]
-        VALIDATOR[Data Validator]
-        NORMALIZER[Data Normalizer]
+    subgraph "プロトコル層"
+        PARSER[プロトコル解析]
+        VALIDATOR[データ検証]
+        NORMALIZER[データ正規化]
     end
     
-    subgraph "Transformation Layer (変換層)"
-        CONVERTER[Format Converter]
-        ENRICHER[Data Enricher]
-        AGGREGATOR[Data Aggregator]
+    subgraph "変換層"
+        CONVERTER[フォーマット変換]
+        ENRICHER[データ拡張]
+        AGGREGATOR[データ集約]
     end
     
-    subgraph "Schema Layer (スキーマ層)"
-        SCHEMA[Schema Registry]
-        VALIDATOR_OUT[Output Validator]
-        VERSIONING[Version Manager]
+    subgraph "スキーマ層"
+        SCHEMA[スキーマレジストリ]
+        VALIDATOR_OUT[出力検証]
+        VERSIONING[バージョン管理]
     end
     
-    subgraph "Output Layer (出力層)"
+    subgraph "出力層"
         JSON_OUT[JSON/HTTP]
-        MQTT_OUT[MQTT Output]
-        DB_OUT[Database]
-        STREAM[Event Stream]
+        MQTT_OUT[MQTT出力]
+        DB_OUT[データベース]
+        STREAM[イベントストリーム]
         WEBHOOK[Webhook]
     end
     
@@ -100,1085 +98,492 @@ graph TB
 
 ### 1. 変換パイプライン
 
-```python
-# データ変換パイプライン概念設計
-class DataTransformationPipeline:
-    """
-    データ変換パイプライン
-    Input → Protocol → Transform → Schema → Output
-    """
-    
-    def __init__(self):
-        self.input_handlers = {}      # 入力ハンドラー
-        self.protocol_parsers = {}    # プロトコル解析器
-        self.transformers = {}        # データ変換器
-        self.schema_registry = {}     # スキーマレジストリ
-        self.output_adapters = {}     # 出力アダプター
-        
-        self.pipeline_stages = [
-            self.input_stage,
-            self.protocol_stage,
-            self.transformation_stage,
-            self.schema_stage,
-            self.output_stage
-        ]
-    
-    async def process(self, input_data: bytes, source_type: str) -> Dict[str, Any]:
-        """データ変換パイプライン実行"""
-        context = TransformationContext(
-            raw_data=input_data,
-            source_type=source_type,
-            timestamp=datetime.utcnow()
-        )
-        
-        # パイプライン段階的実行
-        for stage in self.pipeline_stages:
-            context = await stage(context)
-            
-        return context.output_data
-```
+#### パイプラインアーキテクチャ
+
+データ変換は以下の5段階のパイプラインで処理されます：
+
+1. **入力段階**: 各種データソースからの生データ受信
+2. **プロトコル段階**: プロトコル固有の解析と検証
+3. **変換段階**: 標準フォーマットへの変換
+4. **スキーマ段階**: スキーマ準拠性の検証
+5. **出力段階**: 各種出力先への配信
+
+各段階は独立して動作し、非同期処理により高いスループットを実現します。
 
 ### 2. 入力データ分類
 
-```yaml
-# 入力データタイプ分類
-Input Sources:
-  Hardware Specific:
-    - BravePI: UART 38400baud バイナリ
-    - BraveJIG: USB Serial バイナリ
-    - I2C Direct: 標準I2Cプロトコル
-    - GPIO: デジタル信号
-    
-  Standard Protocols:
-    - MQTT: JSON/バイナリメッセージ
-    - HTTP: REST/JSON
-    - TCP/UDP: カスタムプロトコル
-    - Serial: RS-232/RS-485
-    
-  Future Extensions:
-    - Modbus RTU/TCP
-    - LoRaWAN
-    - Zigbee
-    - WiFi/Ethernet デバイス
+#### 入力ソースの種類
 
-# データ形式分類
-Data Formats:
-  Binary:
-    - Fixed Header: 16-18 bytes
-    - Variable Payload: 0-1024 bytes
-    - CRC/Checksum: 2-4 bytes
-    
-  Text:
-    - JSON: 標準構造化データ
-    - CSV: シンプルセンサーデータ
-    - Custom: 独自テキスト形式
-    
-  Hybrid:
-    - Protocol Buffers
-    - MessagePack
-    - CBOR
-```
+**ハードウェア固有**
+- BravePI: UART通信によるバイナリデータ
+- BraveJIG: USBシリアル通信
+- I2C直接接続: 標準I2Cプロトコル
+- GPIO: デジタル信号入力
+
+**標準プロトコル**
+- MQTT: メッセージングプロトコル
+- HTTP: RESTful API
+- TCP/UDP: ソケット通信
+- シリアル通信: RS-232/RS-485
+
+**将来の拡張**
+- Modbus（RTU/TCP）
+- LoRaWAN
+- Zigbee
+- WiFi/Ethernetデバイス
+
+#### データ形式の分類
+
+**バイナリ形式**
+- 固定長ヘッダー
+- 可変長ペイロード
+- エラー検出用チェックサム
+
+**テキスト形式**
+- JSON: 構造化データ
+- CSV: 表形式データ
+- カスタムテキスト形式
+
+**ハイブリッド形式**
+- Protocol Buffers
+- MessagePack
+- CBOR
 
 ### 3. 出力データ統一化
 
-```typescript
-// 統一出力データスキーマ
-interface UniversalSensorData {
-  // Core Fields (必須)
-  id: string;                    // 一意識別子
-  deviceId: string;              // デバイス識別子
-  sensorType: string;            // センサータイプ（標準化）
-  value: number | boolean | object; // 測定値
-  unit: string;                  // 単位（SI単位系）
-  timestamp: string;             // ISO 8601形式
-  
-  // Quality Fields (品質管理)
-  quality: 'good' | 'uncertain' | 'bad';
-  confidence: number;            // 0.0-1.0
-  accuracy?: number;             // 精度情報
-  
-  // Metadata Fields (メタデータ)
-  source: {
-    type: string;                // 'bravepi', 'esp32', etc.
-    version: string;             // プロトコルバージョン
-    location?: GeoLocation;      // 地理的位置
-  };
-  
-  // Processing Fields (処理情報)
-  processing: {
-    transformedAt: string;       // 変換時刻
-    latency: number;             // 処理遅延(ms)
-    pipelineVersion: string;     // パイプラインバージョン
-  };
-  
-  // Extensions (拡張フィールド)
-  extensions?: Record<string, any>;
-}
+#### 統一データモデル
 
-// センサータイプ標準化
-enum StandardSensorType {
-  // 物理量センサー
-  TEMPERATURE = 'temperature',
-  HUMIDITY = 'humidity',
-  PRESSURE = 'pressure',
-  ILLUMINANCE = 'illuminance',
-  
-  // 運動センサー
-  ACCELERATION = 'acceleration',
-  GYROSCOPE = 'gyroscope',
-  MAGNETOMETER = 'magnetometer',
-  DISTANCE = 'distance',
-  
-  // 電気センサー
-  VOLTAGE = 'voltage',
-  CURRENT = 'current',
-  POWER = 'power',
-  
-  // デジタル信号
-  DIGITAL_INPUT = 'digital_input',
-  DIGITAL_OUTPUT = 'digital_output',
-  CONTACT = 'contact',
-  
-  // 複合センサー
-  POSITION = 'position',
-  ORIENTATION = 'orientation',
-  ENVIRONMENT = 'environment'
-}
-```
+**必須フィールド**
+- 一意識別子
+- デバイス識別子
+- センサータイプ（標準化）
+- 測定値
+- 単位（SI単位系）
+- タイムスタンプ（ISO 8601形式）
+
+**品質管理フィールド**
+- データ品質（良好/不確実/不良）
+- 信頼度（0.0〜1.0）
+- 精度情報
+
+**メタデータフィールド**
+- ソース情報（デバイスタイプ、バージョン）
+- 地理的位置情報（オプション）
+
+**処理情報フィールド**
+- 変換時刻
+- 処理遅延
+- パイプラインバージョン
+
+**拡張フィールド**
+- カスタムデータ用の柔軟な領域
+
+#### 標準センサータイプ
+
+**物理量センサー**
+- 温度、湿度、気圧、照度
+
+**運動センサー**
+- 加速度、ジャイロスコープ、磁力計、距離
+
+**電気センサー**
+- 電圧、電流、電力
+
+**デジタル信号**
+- デジタル入力、デジタル出力、接点
+
+**複合センサー**
+- 位置、方向、環境
 
 ## 変換レイヤー詳細
 
 ### 1. プロトコルパーサー
 
-```python
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
-import struct
-from dataclasses import dataclass
-from datetime import datetime
+#### プロトコル解析の概念
 
-@dataclass
-class ParsedFrame:
-    """解析済みフレームデータ"""
-    protocol_version: int
-    message_type: int
-    device_id: str
-    sensor_type: str
-    timestamp: datetime
-    payload: bytes
-    metadata: Dict[str, Any]
+プロトコルパーサーは、各種デバイスから受信した生データを統一的なフレーム構造に変換する役割を担います。
 
-class ProtocolParser(ABC):
-    """プロトコル解析器基底クラス"""
-    
-    @abstractmethod
-    def supports(self, data: bytes) -> bool:
-        """このパーサーがデータをサポートするか判定"""
-        pass
-    
-    @abstractmethod
-    def parse(self, data: bytes) -> ParsedFrame:
-        """データを解析してフレーム構造を抽出"""
-        pass
-    
-    @abstractmethod
-    def validate(self, frame: ParsedFrame) -> bool:
-        """フレームデータの整合性を検証"""
-        pass
+**解析済みフレームの構成要素**
+- プロトコルバージョン
+- メッセージタイプ
+- デバイスID
+- センサータイプ
+- タイムスタンプ
+- ペイロード（実データ）
+- メタデータ
 
-class BravePIProtocolParser(ProtocolParser):
-    """BravePI専用プロトコル解析器"""
-    
-    PROTOCOL_SIGNATURE = b'\x01'  # BravePIプロトコル識別子
-    HEADER_SIZE = 18
-    
-    def supports(self, data: bytes) -> bool:
-        """BravePIデータかどうか判定"""
-        return (len(data) >= self.HEADER_SIZE and 
-                data[0:1] == self.PROTOCOL_SIGNATURE)
-    
-    def parse(self, data: bytes) -> ParsedFrame:
-        """BravePIバイナリフレーム解析"""
-        if not self.supports(data):
-            raise ValueError("Unsupported protocol format")
-        
-        # ヘッダー解析
-        protocol = data[0]
-        msg_type = data[1]
-        payload_length = struct.unpack('<H', data[2:4])[0]
-        timestamp_raw = struct.unpack('<I', data[4:8])[0]
-        device_number = struct.unpack('<Q', data[8:16])[0]
-        sensor_type_raw = struct.unpack('<H', data[16:18])[0]
-        
-        # ペイロード抽出
-        payload = data[18:18+payload_length] if len(data) > 18 else b''
-        
-        return ParsedFrame(
-            protocol_version=protocol,
-            message_type=msg_type,
-            device_id=f"bravepi-{device_number:08x}",
-            sensor_type=self._map_sensor_type(sensor_type_raw),
-            timestamp=datetime.fromtimestamp(timestamp_raw),
-            payload=payload,
-            metadata={
-                'raw_sensor_type': sensor_type_raw,
-                'payload_length': payload_length,
-                'parser': 'bravepi-v1'
-            }
-        )
-    
-    def validate(self, frame: ParsedFrame) -> bool:
-        """フレーム整合性検証"""
-        # タイムスタンプ妥当性
-        now = datetime.utcnow()
-        time_diff = abs((now - frame.timestamp).total_seconds())
-        if time_diff > 3600:  # 1時間以上の差は異常
-            return False
-        
-        # センサータイプ妥当性
-        if not frame.sensor_type or frame.sensor_type == 'unknown':
-            return False
-            
-        return True
-    
-    def _map_sensor_type(self, raw_type: int) -> str:
-        """BravePI固有センサータイプを標準形式にマッピング"""
-        mapping = {
-            257: StandardSensorType.DIGITAL_INPUT,
-            258: StandardSensorType.DIGITAL_OUTPUT,
-            259: StandardSensorType.VOLTAGE,
-            260: StandardSensorType.DISTANCE,
-            261: StandardSensorType.TEMPERATURE,
-            262: StandardSensorType.ACCELERATION,
-            263: StandardSensorType.PRESSURE,
-            264: StandardSensorType.ILLUMINANCE,
-            # JIG拡張
-            289: StandardSensorType.ILLUMINANCE,
-            290: StandardSensorType.ACCELERATION,
-            291: StandardSensorType.ENVIRONMENT,  # 温湿度複合
-            292: StandardSensorType.PRESSURE,
-            293: StandardSensorType.DISTANCE,
-        }
-        return mapping.get(raw_type, 'unknown')
+**プロトコルパーサーの責務**
+1. データフォーマットの識別
+2. フレーム構造の解析
+3. データ整合性の検証
 
-class GenericJSONParser(ProtocolParser):
-    """汎用JSON形式パーサー"""
-    
-    def supports(self, data: bytes) -> bool:
-        """JSON形式かどうか判定"""
-        try:
-            json.loads(data.decode('utf-8'))
-            return True
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return False
-    
-    def parse(self, data: bytes) -> ParsedFrame:
-        """JSON形式データ解析"""
-        try:
-            json_data = json.loads(data.decode('utf-8'))
-            
-            return ParsedFrame(
-                protocol_version=1,
-                message_type=0,
-                device_id=json_data.get('deviceId', 'unknown'),
-                sensor_type=json_data.get('sensorType', 'unknown'),
-                timestamp=datetime.fromisoformat(
-                    json_data.get('timestamp', datetime.utcnow().isoformat())
-                ),
-                payload=json.dumps(json_data.get('data', {})).encode(),
-                metadata={
-                    'format': 'json',
-                    'parser': 'generic-json-v1'
-                }
-            )
-        except Exception as e:
-            raise ValueError(f"JSON parsing failed: {e}")
-    
-    def validate(self, frame: ParsedFrame) -> bool:
-        """JSON フレーム検証"""
-        return frame.device_id != 'unknown' and frame.sensor_type != 'unknown'
-```
+#### BravePI専用プロトコルの特徴
+
+- 固定長ヘッダー（18バイト）
+- プロトコル識別子による判定
+- センサータイプの標準形式へのマッピング
+- タイムスタンプの妥当性検証
+
+#### 汎用プロトコルのサポート
+
+- JSON形式の自動認識
+- 柔軟なデータ構造への対応
+- 標準フィールドの抽出
 
 ### 2. データ変換器
 
-```python
-class DataTransformer(ABC):
-    """データ変換器基底クラス"""
-    
-    @abstractmethod
-    def transform(self, frame: ParsedFrame) -> UniversalSensorData:
-        """フレームデータを統一形式に変換"""
-        pass
+#### データ変換の役割
 
-class BravePITransformer(DataTransformer):
-    """BravePI専用データ変換器"""
-    
-    def transform(self, frame: ParsedFrame) -> UniversalSensorData:
-        """BravePIフレームを統一形式に変換"""
-        # センサー値抽出
-        value, unit = self._extract_sensor_value(
-            frame.metadata['raw_sensor_type'], 
-            frame.payload
-        )
-        
-        # 品質評価
-        quality = self._assess_quality(frame, value)
-        
-        return UniversalSensorData(
-            id=f"{frame.device_id}-{frame.sensor_type}-{int(frame.timestamp.timestamp())}",
-            deviceId=frame.device_id,
-            sensorType=frame.sensor_type,
-            value=value,
-            unit=unit,
-            timestamp=frame.timestamp.isoformat(),
-            quality=quality,
-            confidence=self._calculate_confidence(frame, value),
-            source={
-                'type': 'bravepi',
-                'version': f"v{frame.protocol_version}",
-                'parser': frame.metadata['parser']
-            },
-            processing={
-                'transformedAt': datetime.utcnow().isoformat(),
-                'latency': 0,  # 後で計算
-                'pipelineVersion': '1.0.0'
-            }
-        )
-    
-    def _extract_sensor_value(self, sensor_type: int, payload: bytes) -> tuple:
-        """センサータイプ別値抽出"""
-        if sensor_type in [257, 258]:  # 接点入力/出力
-            return bool(payload[0]) if payload else False, ""
-        
-        elif sensor_type in [259]:  # ADC
-            if len(payload) >= 4:
-                value = struct.unpack('<f', payload[:4])[0]
-                return round(value, 3), "mV"
-        
-        elif sensor_type in [260, 293]:  # 測距
-            if len(payload) >= 4:
-                value = struct.unpack('<f', payload[:4])[0]
-                return round(value, 2), "mm"
-        
-        elif sensor_type in [261]:  # 温度
-            if len(payload) >= 4:
-                value = struct.unpack('<f', payload[:4])[0]
-                return round(value, 2), "℃"
-        
-        elif sensor_type in [262, 290]:  # 加速度
-            if len(payload) >= 12:
-                x = struct.unpack('<f', payload[0:4])[0]
-                y = struct.unpack('<f', payload[4:8])[0]
-                z = struct.unpack('<f', payload[8:12])[0]
-                composite = (x**2 + y**2 + z**2) ** 0.5
-                
-                return {
-                    'x': round(x, 3),
-                    'y': round(y, 3),
-                    'z': round(z, 3),
-                    'magnitude': round(composite, 3)
-                }, "G"
-        
-        elif sensor_type in [291]:  # 温湿度
-            if len(payload) >= 8:
-                temp = struct.unpack('<f', payload[0:4])[0]
-                humidity = struct.unpack('<f', payload[4:8])[0]
-                return {
-                    'temperature': round(temp, 2),
-                    'humidity': round(humidity, 1)
-                }, "℃/%"
-        
-        return None, ""
-    
-    def _assess_quality(self, frame: ParsedFrame, value: Any) -> str:
-        """データ品質評価"""
-        if value is None:
-            return 'bad'
-        
-        # タイムスタンプ新鮮度
-        age = (datetime.utcnow() - frame.timestamp).total_seconds()
-        if age > 300:  # 5分以上古い
-            return 'uncertain'
-        
-        # TODO: センサー固有の品質判定ロジック
-        
-        return 'good'
-    
-    def _calculate_confidence(self, frame: ParsedFrame, value: Any) -> float:
-        """信頼度計算"""
-        confidence = 1.0
-        
-        # タイムスタンプ新鮮度による減点
-        age = (datetime.utcnow() - frame.timestamp).total_seconds()
-        if age > 60:
-            confidence *= max(0.5, 1.0 - age / 3600)
-        
-        # データ妥当性による減点
-        if value is None:
-            confidence = 0.0
-        
-        return round(confidence, 3)
+データ変換器は、解析されたフレームデータを統一的なセンサーデータ形式に変換します。
 
-class MultiProtocolTransformer(DataTransformer):
-    """マルチプロトコル対応変換器"""
-    
-    def __init__(self):
-        self.transformers = {
-            'bravepi': BravePITransformer(),
-            'json': GenericJSONTransformer(),
-            # 他のプロトコル変換器も登録
-        }
-    
-    def transform(self, frame: ParsedFrame) -> UniversalSensorData:
-        """プロトコルタイプに応じた変換器を選択"""
-        parser_type = frame.metadata.get('parser', '').split('-')[0]
-        
-        transformer = self.transformers.get(parser_type)
-        if not transformer:
-            raise ValueError(f"No transformer for parser: {parser_type}")
-        
-        return transformer.transform(frame)
-```
+**変換処理の流れ**
+1. センサー値の抽出
+2. 単位の標準化
+3. データ品質の評価
+4. 信頼度の計算
+5. メタデータの付与
+
+#### センサータイプ別の変換ロジック
+
+**デジタル信号**
+- 接点入力/出力: ブール値への変換
+
+**アナログ信号**
+- ADC: ミリボルト単位への変換
+- 測距: ミリメートル単位への変換
+- 温度: 摂氏温度への変換
+
+**複合データ**
+- 加速度: 3軸データと合成値の計算
+- 温湿度: 複数パラメータの同時変換
+
+#### データ品質評価基準
+
+1. **データの有効性**: 値が正常に取得できているか
+2. **タイムスタンプの新鮮度**: データの鮮度による品質判定
+3. **センサー固有の基準**: 各センサーの特性に応じた評価
+
+#### マルチプロトコル対応
+
+- プロトコルタイプに応じた変換器の動的選択
+- 新規プロトコルの追加が容易な設計
+- 共通インターフェースによる統一的な処理
 
 ### 3. データエンリッチャー
 
-```python
-class DataEnricher:
-    """データ付加価値向上処理"""
-    
-    def __init__(self):
-        self.location_resolver = LocationResolver()
-        self.calibration_manager = CalibrationManager()
-        self.analytics_engine = AnalyticsEngine()
-    
-    async def enrich(self, data: UniversalSensorData) -> UniversalSensorData:
-        """データエンリッチメント処理"""
-        # 位置情報付加
-        if location := await self.location_resolver.resolve(data.deviceId):
-            data.source['location'] = location
-        
-        # 較正処理
-        if calibrated_value := self.calibration_manager.calibrate(
-            data.deviceId, data.sensorType, data.value
-        ):
-            data.extensions = data.extensions or {}
-            data.extensions['calibrated_value'] = calibrated_value
-        
-        # 統計情報付加
-        stats = await self.analytics_engine.calculate_stats(
-            data.deviceId, data.sensorType, data.value
-        )
-        if stats:
-            data.extensions = data.extensions or {}
-            data.extensions['statistics'] = stats
-        
-        return data
+#### データエンリッチメントの概念
 
-class LocationResolver:
-    """デバイス位置情報解決"""
-    
-    async def resolve(self, device_id: str) -> Optional[Dict[str, float]]:
-        """デバイスIDから位置情報を取得"""
-        # データベースまたは設定から位置情報取得
-        # 実装例: GPS座標、建物・フロア情報等
-        return {
-            'latitude': 33.606389,  # 福岡県工業技術センター
-            'longitude': 130.418056,
-            'altitude': 10.0,
-            'building': 'FITC',
-            'floor': 1,
-            'room': 'Lab-A'
-        }
+データエンリッチャーは、基本的なセンサーデータに付加価値を提供する処理を行います。
 
-class CalibrationManager:
-    """センサー較正管理"""
-    
-    def calibrate(self, device_id: str, sensor_type: str, raw_value: Any) -> Any:
-        """センサー較正処理"""
-        calibration = self._get_calibration_params(device_id, sensor_type)
-        if not calibration:
-            return None
-        
-        if isinstance(raw_value, (int, float)):
-            # 線形較正: y = ax + b
-            return raw_value * calibration['scale'] + calibration['offset']
-        
-        elif isinstance(raw_value, dict):
-            # 複数値の較正
-            calibrated = {}
-            for key, value in raw_value.items():
-                if isinstance(value, (int, float)):
-                    cal_params = calibration.get(key, {'scale': 1.0, 'offset': 0.0})
-                    calibrated[key] = value * cal_params['scale'] + cal_params['offset']
-            return calibrated
-        
-        return None
-    
-    def _get_calibration_params(self, device_id: str, sensor_type: str) -> Dict:
-        """較正パラメータ取得"""
-        # データベースから較正パラメータを取得
-        # 実装例: デバイス・センサー固有の較正係数
-        return {
-            'scale': 1.0,
-            'offset': 0.0,
-            'last_calibrated': '2025-01-01T00:00:00Z'
-        }
+**主要な機能**
 
-class AnalyticsEngine:
-    """リアルタイム分析エンジン"""
-    
-    async def calculate_stats(
-        self, 
-        device_id: str, 
-        sensor_type: str, 
-        value: Any
-    ) -> Optional[Dict[str, Any]]:
-        """統計情報計算"""
-        # 過去データから統計情報を計算
-        # 実装例: 移動平均、標準偏差、異常検知等
-        return {
-            'moving_average_1h': 25.2,
-            'std_deviation_1h': 1.5,
-            'min_24h': 18.5,
-            'max_24h': 32.1,
-            'anomaly_score': 0.1,
-            'trend': 'stable'
-        }
-```
+1. **位置情報の付加**
+   - デバイスIDから物理的位置を解決
+   - GPS座標、建物、フロア、部屋情報の追加
+
+2. **較正処理**
+   - センサー固有の較正パラメータ適用
+   - 線形較正（スケールとオフセット）
+   - 複数値データの同時較正
+
+3. **統計情報の追加**
+   - 移動平均の計算
+   - 標準偏差の算出
+   - 最小値・最大値の記録
+   - 異常スコアの計算
+   - トレンド分析
+
+#### 位置情報解決の仕組み
+
+- デバイスIDと物理位置のマッピング管理
+- 階層的な位置情報（建物→フロア→部屋）
+- 動的な位置更新への対応
+
+#### センサー較正の重要性
+
+- 製造誤差の補正
+- 経年劣化への対応
+- 環境要因の補償
+- 較正履歴の管理
+
+#### リアルタイム分析
+
+- ストリーミングデータの統計処理
+- 異常値検出アルゴリズム
+- トレンド分析による予測
 
 ## プロトコル抽象化
 
 ### 1. プロトコル検出器
 
-```python
-class ProtocolDetector:
-    """プロトコル自動検出システム"""
-    
-    def __init__(self):
-        self.parsers: List[ProtocolParser] = [
-            BravePIProtocolParser(),
-            BraveJIGProtocolParser(),
-            GenericJSONParser(),
-            ModbusRTUParser(),
-            # 他のプロトコルパーサー
-        ]
-    
-    def detect(self, data: bytes) -> Optional[ProtocolParser]:
-        """データからプロトコルタイプを検出"""
-        for parser in self.parsers:
-            if parser.supports(data):
-                return parser
-        return None
-    
-    def register_parser(self, parser: ProtocolParser) -> None:
-        """新しいプロトコルパーサーを登録"""
-        self.parsers.append(parser)
+#### 自動プロトコル検出の仕組み
 
-class ProtocolRouter:
-    """プロトコル別ルーティング"""
-    
-    def __init__(self):
-        self.detector = ProtocolDetector()
-        self.transformer = MultiProtocolTransformer()
-        self.enricher = DataEnricher()
-    
-    async def route(self, raw_data: bytes, source_info: Dict) -> UniversalSensorData:
-        """データを適切なパーサー・変換器にルーティング"""
-        # プロトコル検出
-        parser = self.detector.detect(raw_data)
-        if not parser:
-            raise ValueError("Unknown protocol")
-        
-        # フレーム解析
-        frame = parser.parse(raw_data)
-        
-        # 検証
-        if not parser.validate(frame):
-            raise ValueError("Invalid frame data")
-        
-        # 変換
-        universal_data = self.transformer.transform(frame)
-        
-        # エンリッチメント
-        enriched_data = await self.enricher.enrich(universal_data)
-        
-        return enriched_data
-```
+プロトコル検出器は、受信したデータのフォーマットを自動的に識別し、適切なパーサーを選択します。
+
+**検出プロセス**
+1. 登録されたパーサーを順次評価
+2. データフォーマットの特徴を識別
+3. 対応するパーサーを返却
+
+**サポートプロトコル**
+- BravePI専用プロトコル
+- BraveJIG専用プロトコル
+- 汎用JSON形式
+- Modbus RTU
+- 拡張可能な設計
+
+#### プロトコルルーティング
+
+**ルーティングの流れ**
+1. プロトコルの自動検出
+2. データフレームの解析
+3. フレームデータの検証
+4. 統一形式への変換
+5. データエンリッチメント
+
+**エラーハンドリング**
+- 未知のプロトコルの検出
+- 不正なフレームデータの処理
+- 変換エラーの適切な処理
 
 ### 2. スキーマレジストリ
 
-```python
-import jsonschema
-from typing import Dict, Any
+#### スキーマ管理の重要性
 
-class SchemaRegistry:
-    """スキーマバージョン管理・検証システム"""
-    
-    def __init__(self):
-        self.schemas: Dict[str, Dict[str, Any]] = {}
-        self.current_version = "1.0.0"
-        self._load_schemas()
-    
-    def _load_schemas(self):
-        """スキーマ定義読み込み"""
-        self.schemas = {
-            "1.0.0": {
-                "type": "object",
-                "required": ["id", "deviceId", "sensorType", "value", "unit", "timestamp"],
-                "properties": {
-                    "id": {"type": "string"},
-                    "deviceId": {"type": "string"},
-                    "sensorType": {"type": "string"},
-                    "value": {"oneOf": [
-                        {"type": "number"},
-                        {"type": "boolean"},
-                        {"type": "object"}
-                    ]},
-                    "unit": {"type": "string"},
-                    "timestamp": {"type": "string", "format": "date-time"},
-                    "quality": {"type": "string", "enum": ["good", "uncertain", "bad"]},
-                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                    "source": {"type": "object"},
-                    "processing": {"type": "object"},
-                    "extensions": {"type": "object"}
-                }
-            }
-        }
-    
-    def validate(self, data: Dict[str, Any], version: str = None) -> bool:
-        """データがスキーマに準拠しているか検証"""
-        version = version or self.current_version
-        schema = self.schemas.get(version)
-        
-        if not schema:
-            raise ValueError(f"Unknown schema version: {version}")
-        
-        try:
-            jsonschema.validate(data, schema)
-            return True
-        except jsonschema.ValidationError:
-            return False
-    
-    def evolve_schema(self, new_version: str, schema: Dict[str, Any]):
-        """スキーマ進化・新バージョン追加"""
-        self.schemas[new_version] = schema
-        # 後方互換性チェック
-        self._check_compatibility(new_version)
-    
-    def _check_compatibility(self, new_version: str):
-        """後方互換性チェック"""
-        # TODO: スキーマ互換性検証ロジック実装
-        pass
-```
+スキーマレジストリは、データ構造の一貫性を保証し、バージョン管理を行うシステムです。
+
+**主要機能**
+
+1. **スキーマ定義の管理**
+   - 必須フィールドの定義
+   - データ型の制約
+   - 値の範囲制限
+   - フォーマット仕様
+
+2. **バージョン管理**
+   - 複数バージョンの並行サポート
+   - バージョン間の移行支援
+   - 現行バージョンの追跡
+
+3. **検証機能**
+   - データのスキーマ準拠性チェック
+   - エラーの詳細な報告
+   - バリデーション結果の返却
+
+4. **スキーマ進化**
+   - 新バージョンの追加
+   - 後方互換性の確保
+   - 段階的な移行サポート
+
+#### スキーマ定義の構造
+
+**必須フィールド**
+- ID、デバイスID、センサータイプ
+- 測定値、単位、タイムスタンプ
+
+**オプションフィールド**
+- 品質情報、信頼度
+- ソース情報、処理情報
+- 拡張フィールド
 
 ## パフォーマンス設計
 
 ### 1. 非同期処理アーキテクチャ
 
-```python
-import asyncio
-from asyncio import Queue
-from typing import AsyncIterator
-import aiofiles
+#### 並行処理の設計思想
 
-class AsyncDataProcessor:
-    """非同期データ処理システム"""
-    
-    def __init__(self, max_workers: int = 10):
-        self.input_queue: Queue = Queue()
-        self.output_queue: Queue = Queue()
-        self.workers: List[asyncio.Task] = []
-        self.max_workers = max_workers
-        self.router = ProtocolRouter()
-    
-    async def start(self):
-        """処理ワーカー開始"""
-        for i in range(self.max_workers):
-            worker = asyncio.create_task(self._worker(f"worker-{i}"))
-            self.workers.append(worker)
-    
-    async def stop(self):
-        """処理ワーカー停止"""
-        for worker in self.workers:
-            worker.cancel()
-        await asyncio.gather(*self.workers, return_exceptions=True)
-    
-    async def _worker(self, worker_id: str):
-        """データ処理ワーカー"""
-        while True:
-            try:
-                # 入力キューからデータ取得
-                raw_data, source_info = await self.input_queue.get()
-                
-                # データ処理
-                start_time = asyncio.get_event_loop().time()
-                universal_data = await self.router.route(raw_data, source_info)
-                processing_time = asyncio.get_event_loop().time() - start_time
-                
-                # 処理時間記録
-                universal_data.processing['latency'] = round(processing_time * 1000, 2)
-                universal_data.processing['worker_id'] = worker_id
-                
-                # 出力キューに結果送信
-                await self.output_queue.put(universal_data)
-                
-                # タスク完了通知
-                self.input_queue.task_done()
-                
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Worker {worker_id} error: {e}")
-                self.input_queue.task_done()
-    
-    async def process_data(self, raw_data: bytes, source_info: Dict) -> None:
-        """データ処理要求"""
-        await self.input_queue.put((raw_data, source_info))
-    
-    async def get_processed_data(self) -> UniversalSensorData:
-        """処理済みデータ取得"""
-        return await self.output_queue.get()
-```
+非同期処理により、高いスループットと低レイテンシを実現します。
+
+**アーキテクチャの特徴**
+
+1. **ワーカープール方式**
+   - 複数のワーカーによる並行処理
+   - 負荷分散の自動化
+   - スケーラブルな処理能力
+
+2. **キューベースの処理**
+   - 入力キューと出力キューの分離
+   - バックプレッシャー制御
+   - 処理の非同期化
+
+3. **エラー処理**
+   - ワーカー単位のエラー隔離
+   - 自動リトライ機構
+   - エラーログの詳細記録
+
+4. **パフォーマンス計測**
+   - 処理時間の自動記録
+   - ワーカー別の統計情報
+   - ボトルネックの特定
+
+#### 処理フローの最適化
+
+- 非ブロッキングI/O
+- コルーチンベースの処理
+- リソースの効率的な利用
 
 ### 2. バッチ処理最適化
 
-```python
-class BatchProcessor:
-    """バッチ処理最適化システム"""
-    
-    def __init__(self, batch_size: int = 100, flush_interval: float = 1.0):
-        self.batch_size = batch_size
-        self.flush_interval = flush_interval
-        self.batch: List[UniversalSensorData] = []
-        self.last_flush = asyncio.get_event_loop().time()
-        self.outputs: List[OutputAdapter] = []
-    
-    async def add_data(self, data: UniversalSensorData):
-        """データをバッチに追加"""
-        self.batch.append(data)
-        
-        # バッチサイズまたは時間でフラッシュ
-        current_time = asyncio.get_event_loop().time()
-        if (len(self.batch) >= self.batch_size or 
-            current_time - self.last_flush >= self.flush_interval):
-            await self.flush()
-    
-    async def flush(self):
-        """バッチデータを出力"""
-        if not self.batch:
-            return
-        
-        batch_data = self.batch.copy()
-        self.batch.clear()
-        self.last_flush = asyncio.get_event_loop().time()
-        
-        # 並行出力
-        tasks = []
-        for output in self.outputs:
-            task = asyncio.create_task(output.write_batch(batch_data))
-            tasks.append(task)
-        
-        await asyncio.gather(*tasks, return_exceptions=True)
+#### バッチ処理の設計原則
 
-class CacheManager:
-    """データキャッシュ管理"""
-    
-    def __init__(self, ttl: int = 300):  # 5分TTL
-        self.cache: Dict[str, Any] = {}
-        self.ttl = ttl
-    
-    async def get(self, key: str) -> Optional[Any]:
-        """キャッシュからデータ取得"""
-        if key in self.cache:
-            data, timestamp = self.cache[key]
-            if asyncio.get_event_loop().time() - timestamp < self.ttl:
-                return data
-            else:
-                del self.cache[key]
-        return None
-    
-    async def set(self, key: str, value: Any):
-        """キャッシュにデータ設定"""
-        self.cache[key] = (value, asyncio.get_event_loop().time())
-    
-    async def invalidate(self, pattern: str):
-        """パターンマッチでキャッシュ無効化"""
-        keys_to_delete = [key for key in self.cache.keys() if pattern in key]
-        for key in keys_to_delete:
-            del self.cache[key]
-```
+バッチ処理により、I/O効率を最大化し、システム全体のスループットを向上させます。
+
+**バッチ処理の特徴**
+
+1. **動的バッチサイズ**
+   - データ量に基づく自動調整
+   - 時間ベースのフラッシュ
+   - 最適なバッチサイズの維持
+
+2. **並行出力**
+   - 複数の出力先への同時書き込み
+   - 非同期I/Oの活用
+   - エラーの独立処理
+
+3. **バッファ管理**
+   - メモリ効率的なバッファリング
+   - オーバーフロー防止
+   - 適切なバックプレッシャー
+
+#### キャッシュ戦略
+
+**キャッシュの役割**
+- 頻繁にアクセスされるデータの高速化
+- ネットワーク遅延の削減
+- システム負荷の軽減
+
+**キャッシュ管理機能**
+- TTL（Time To Live）ベースの自動削除
+- パターンマッチによる選択的無効化
+- メモリ使用量の制御
 
 ### 3. 監視・メトリクス
 
-```python
-from dataclasses import dataclass
-from collections import defaultdict, deque
-import time
+#### パフォーマンス監視の重要性
 
-@dataclass
-class PerformanceMetrics:
-    """パフォーマンスメトリクス"""
-    total_messages: int = 0
-    successful_conversions: int = 0
-    failed_conversions: int = 0
-    average_latency: float = 0.0
-    max_latency: float = 0.0
-    min_latency: float = float('inf')
-    messages_per_second: float = 0.0
-    
-class MetricsCollector:
-    """メトリクス収集システム"""
-    
-    def __init__(self, window_size: int = 1000):
-        self.window_size = window_size
-        self.latencies = deque(maxlen=window_size)
-        self.timestamps = deque(maxlen=window_size)
-        self.errors_by_type = defaultdict(int)
-        self.lock = asyncio.Lock()
-    
-    async def record_success(self, latency: float):
-        """成功メトリクス記録"""
-        async with self.lock:
-            self.latencies.append(latency)
-            self.timestamps.append(time.time())
-    
-    async def record_error(self, error_type: str):
-        """エラーメトリクス記録"""
-        async with self.lock:
-            self.errors_by_type[error_type] += 1
-    
-    async def get_metrics(self) -> PerformanceMetrics:
-        """現在のメトリクス取得"""
-        async with self.lock:
-            if not self.latencies:
-                return PerformanceMetrics()
-            
-            # レイテンシ統計
-            avg_latency = sum(self.latencies) / len(self.latencies)
-            max_latency = max(self.latencies)
-            min_latency = min(self.latencies)
-            
-            # スループット計算
-            if len(self.timestamps) >= 2:
-                time_span = self.timestamps[-1] - self.timestamps[0]
-                mps = len(self.timestamps) / time_span if time_span > 0 else 0
-            else:
-                mps = 0
-            
-            return PerformanceMetrics(
-                total_messages=len(self.latencies),
-                successful_conversions=len(self.latencies),
-                failed_conversions=sum(self.errors_by_type.values()),
-                average_latency=avg_latency,
-                max_latency=max_latency,
-                min_latency=min_latency,
-                messages_per_second=mps
-            )
-```
+システムの健全性を維持し、問題を早期に発見するための包括的な監視システムです。
+
+**収集するメトリクス**
+
+1. **処理統計**
+   - 総メッセージ数
+   - 成功/失敗の変換数
+   - エラー種別の分類
+
+2. **レイテンシ分析**
+   - 平均処理時間
+   - 最大/最小レイテンシ
+   - レイテンシ分布
+
+3. **スループット測定**
+   - 毎秒処理メッセージ数
+   - ピーク処理能力
+   - 処理効率
+
+#### メトリクス収集の仕組み
+
+**スライディングウィンドウ方式**
+- 最新のN件のデータを保持
+- リアルタイムの統計計算
+- メモリ効率的な実装
+
+**エラー分析**
+- エラータイプ別の集計
+- エラー頻度の追跡
+- トラブルシューティング支援
+
+**非同期収集**
+- パフォーマンスへの影響最小化
+- スレッドセーフな実装
+- 高精度なタイミング測定
 
 ## 拡張性設計
 
 ### 1. プラグインアーキテクチャ
 
-```python
-from abc import ABC, abstractmethod
-import importlib
-from typing import Type
+#### プラグインシステムの設計思想
 
-class TransformationPlugin(ABC):
-    """変換プラグイン基底クラス"""
-    
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """プラグイン名"""
-        pass
-    
-    @property
-    @abstractmethod
-    def version(self) -> str:
-        """プラグインバージョン"""
-        pass
-    
-    @abstractmethod
-    def get_parser(self) -> ProtocolParser:
-        """プロトコルパーサー取得"""
-        pass
-    
-    @abstractmethod
-    def get_transformer(self) -> DataTransformer:
-        """データ変換器取得"""
-        pass
+新しいデバイスやプロトコルを容易に追加できる拡張可能なアーキテクチャです。
 
-class PluginManager:
-    """プラグイン管理システム"""
-    
-    def __init__(self):
-        self.plugins: Dict[str, TransformationPlugin] = {}
-        self.protocol_detector = ProtocolDetector()
-        self.transformer = MultiProtocolTransformer()
-    
-    def register_plugin(self, plugin: TransformationPlugin):
-        """プラグイン登録"""
-        self.plugins[plugin.name] = plugin
-        
-        # プロトコルパーサー登録
-        parser = plugin.get_parser()
-        self.protocol_detector.register_parser(parser)
-        
-        # 変換器登録
-        transformer = plugin.get_transformer()
-        self.transformer.register_transformer(plugin.name, transformer)
-    
-    def load_plugin_from_file(self, plugin_path: str):
-        """ファイルからプラグイン動的ロード"""
-        spec = importlib.util.spec_from_file_location("plugin", plugin_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        
-        # プラグインクラス検索
-        for item_name in dir(module):
-            item = getattr(module, item_name)
-            if (isinstance(item, type) and 
-                issubclass(item, TransformationPlugin) and 
-                item != TransformationPlugin):
-                plugin = item()
-                self.register_plugin(plugin)
-                break
+**プラグインの構成要素**
 
-# プラグイン実装例
-class ESP32Plugin(TransformationPlugin):
-    """ESP32デバイス対応プラグイン"""
-    
-    @property
-    def name(self) -> str:
-        return "esp32"
-    
-    @property
-    def version(self) -> str:
-        return "1.0.0"
-    
-    def get_parser(self) -> ProtocolParser:
-        return ESP32ProtocolParser()
-    
-    def get_transformer(self) -> DataTransformer:
-        return ESP32Transformer()
+1. **プラグインインターフェース**
+   - 名前とバージョンの定義
+   - パーサーの提供
+   - 変換器の提供
 
-class ESP32ProtocolParser(ProtocolParser):
-    """ESP32専用プロトコルパーサー"""
-    
-    def supports(self, data: bytes) -> bool:
-        # ESP32固有のプロトコル識別
-        return data.startswith(b'ESP32:')
-    
-    def parse(self, data: bytes) -> ParsedFrame:
-        # ESP32プロトコル解析実装
-        pass
-    
-    def validate(self, frame: ParsedFrame) -> bool:
-        # ESP32フレーム検証実装
-        pass
-```
+2. **プラグイン管理**
+   - 動的なプラグイン登録
+   - ファイルからの自動ロード
+   - 依存関係の解決
+
+3. **プラグイン実装例**
+   - ESP32デバイスサポート
+   - カスタムプロトコル対応
+   - 独自センサーの統合
+
+#### 拡張のメリット
+
+**開発効率**
+- 既存コードの変更不要
+- 独立した開発とテスト
+- 段階的な機能追加
+
+**保守性**
+- モジュール単位の更新
+- バージョン管理の簡素化
+- 問題の局所化
+
+**柔軟性**
+- 顧客固有の要件対応
+- 実験的機能の追加
+- 迅速なプロトタイピング
 
 ### 2. 設定管理システム
 
-```yaml
-# config/transformation.yaml
-transformation:
-  version: "1.0.0"
-  
-  # プロトコル設定
-  protocols:
-    bravepi:
-      enabled: true
-      timeout: 5000
-      retry_count: 3
-      
-    bravejig:
-      enabled: true
-      usb_timeout: 10000
-      
-    esp32:
-      enabled: false
-      wifi_timeout: 15000
-  
-  # 変換設定
-  conversion:
-    quality_threshold: 0.8
-    confidence_threshold: 0.9
-    max_latency_ms: 100
-    
-  # 出力設定
-  outputs:
-    json_api:
-      enabled: true
-      batch_size: 100
-      flush_interval: 1.0
-      
-    mqtt:
-      enabled: true
-      broker: "localhost:1883"
-      qos: 1
-      
-    database:
-      enabled: true
-      connection: "postgresql://..."
-      batch_size: 1000
-  
-  # キャッシュ設定
-  cache:
-    enabled: true
-    ttl: 300
-    max_size: 10000
-  
-  # 監視設定
-  monitoring:
-    metrics_enabled: true
-    log_level: "INFO"
-    performance_tracking: true
-```
+#### 階層的な設定構造
 
-```python
-class ConfigurationManager:
-    """設定管理システム"""
-    
-    def __init__(self, config_path: str = "config/transformation.yaml"):
-        self.config_path = config_path
-        self.config = self._load_config()
-        self.watchers: List[Callable] = []
-    
-    def _load_config(self) -> Dict[str, Any]:
-        """設定ファイル読み込み"""
-        with open(self.config_path, 'r') as f:
-            return yaml.safe_load(f)
-    
-    def get(self, key_path: str, default: Any = None) -> Any:
-        """設定値取得（ドット記法サポート）"""
-        keys = key_path.split('.')
-        value = self.config
-        
-        for key in keys:
-            if isinstance(value, dict) and key in value:
-                value = value[key]
-            else:
-                return default
-                
-        return value
-    
-    def watch(self, callback: Callable[[Dict[str, Any]], None]):
-        """設定変更監視"""
-        self.watchers.append(callback)
-    
-    async def reload(self):
-        """設定リロード"""
-        new_config = self._load_config()
-        old_config = self.config
-        self.config = new_config
-        
-        # 変更通知
-        for watcher in self.watchers:
-            await watcher(new_config, old_config)
-```
+設定管理システムは、システム全体の動作を制御する中心的な役割を果たします。
+
+**設定カテゴリ**
+
+1. **プロトコル設定**
+   - 有効/無効の切り替え
+   - タイムアウト値
+   - リトライ回数
+
+2. **変換設定**
+   - 品質しきい値
+   - 信頼度しきい値
+   - 最大レイテンシ
+
+3. **出力設定**
+   - 出力先の有効化
+   - バッチサイズ
+   - 接続パラメータ
+
+4. **キャッシュ設定**
+   - TTL（有効期限）
+   - 最大サイズ
+   - 削除ポリシー
+
+5. **監視設定**
+   - メトリクス収集
+   - ログレベル
+   - パフォーマンス追跡
+
+#### 動的設定管理
+
+**主要機能**
+- ドット記法による階層アクセス
+- デフォルト値のサポート
+- 設定変更の監視
+- ホットリロード対応
+
+**利点**
+- 再起動不要な設定変更
+- 環境別の設定管理
+- 設定の一元化
 
 ---
 
@@ -1188,5 +593,4 @@ class ConfigurationManager:
 **作成日付**: 2025年6月6日  
 **対象システム**: BravePI/JIG データ変換システム  
 **アーキテクチャレベル**: データ変換・プロトコル抽象化  
-**実装言語**: Python 3.11+ / TypeScript  
-**文書レベル**: アーキテクチャ設計・実装仕様 (★★★)
+**文書レベル**: アーキテクチャ概念設計

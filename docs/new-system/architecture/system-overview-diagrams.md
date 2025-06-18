@@ -42,7 +42,7 @@ graph TB
         end
         
         subgraph "データベース層"
-            MARIADB[MariaDB<br/>BravePI専用テーブル]
+            SQLITE[SQLite<br/>BravePI専用テーブル]
             INFLUX[InfluxDB<br/>固定スキーマ]
         end
         
@@ -62,8 +62,8 @@ graph TB
     F53 --> H1
     H1 --> H2
     H2 --> H380
-    H380 --> MARIADB
-    MARIADB --> INFLUX
+    H380 --> SQLITE
+    SQLITE --> INFLUX
     INFLUX --> WEB
     
     style F1 fill:#ff6b6b,stroke:#fff,stroke-width:2px,color:#fff
@@ -534,15 +534,15 @@ graph TB
 sequenceDiagram
     participant BravePI
     participant NodeRED as Node-RED<br/>(1017 nodes)
-    participant MariaDB
+    participant SQLite
     participant InfluxDB
     participant Dashboard
     
     BravePI->>NodeRED: バイナリプロトコル<br/>(38400baud)
     Note over NodeRED: 53個のFunctionノード<br/>でプロトコル解析
     NodeRED->>NodeRED: センサータイプ別処理<br/>(380個のHardwareノード)
-    NodeRED->>MariaDB: BravePI専用テーブル<br/>への保存
-    MariaDB->>InfluxDB: 時系列データ転送
+    NodeRED->>SQLite: BravePI専用テーブル<br/>への保存
+    SQLite->>InfluxDB: 時系列データ転送
     InfluxDB->>Dashboard: ハードウェア固有UI<br/>での表示
     
     Note over BravePI,Dashboard: 問題：全てがBravePI固有実装

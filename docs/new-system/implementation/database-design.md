@@ -145,430 +145,110 @@ INSERT INTO system_config (key, value, description) VALUES
     ('connection_timeout', '10.0', 'Network connection timeout in seconds');
 ```
 
-## Python実装
+## データ操作の概念
 
-### データベースクラス
+### 基本的な操作パターン
 
-```python
-# edge-gateway/database/sqlite_manager.py
-import sqlite3
-import json
-import threading
-from contextlib import contextmanager
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+SQLiteデータベースへのアクセスは以下の原則に従います：
 
-class LocalSQLiteDB:
-    def __init__(self, db_path: str = "gateway_config.db"):
-        self.db_path = Path(db_path)
-        self._local = threading.local()
-        self._init_database()
-    
-    def _init_database(self):
-        """データベースとテーブルを初期化"""
-        if not self.db_path.exists():
-            self._create_tables()
-            self._insert_default_data()
-    
-    def _create_tables(self):
-        """テーブル作成"""
-        with self._get_connection() as conn:
-            schema_path = Path(__file__).parent / "schema.sql"
-            with open(schema_path, 'r', encoding='utf-8') as f:
-                conn.executescript(f.read())
-    
-    @contextmanager
-    def _get_connection(self):
-        """スレッドローカルなDB接続を取得"""
-        if not hasattr(self._local, 'connection'):
-            self._local.connection = sqlite3.connect(
-                self.db_path,
-                isolation_level=None,  # autocommit mode
-                check_same_thread=False
-            )
-            self._local.connection.row_factory = sqlite3.Row
-        
-        try:
-            yield self._local.connection
-        except Exception:
-            self._local.connection.rollback()
-            raise
-    
-    def get_sensor_config(self, sensor_id: str) -> Optional[Dict]:
-        """センサー設定を取得"""
-        with self._get_connection() as conn:
-            cursor = conn.execute("""
-                SELECT s.*, t.*, c.*
-                FROM sensors s
-                LEFT JOIN thresholds t ON s.id = t.sensor_id
-                LEFT JOIN calibration c ON s.id = c.sensor_id
-                WHERE s.id = ? AND s.enabled = TRUE
-            """, (sensor_id,))
-            
-            row = cursor.fetchone()
-            if not row:
-                return None
-            
-            return {
-                "sensor": {
-                    "id": row["id"],
-                    "name": row["name"],
-                    "sensor_type": row["sensor_type"],
-                    "unit": row["unit"],
-                    "config": json.loads(row["config"]) if row["config"] else {}
-                },
-                "thresholds": {
-                    "high": row["threshold_high"],
-                    "low": row["threshold_low"],
-                    "hysteresis_high": row["hysteresis_high"] or 0.0,
-                    "hysteresis_low": row["hysteresis_low"] or 0.0,
-                    "debounce_high": row["debounce_high"] or 0.0,
-                    "debounce_low": row["debounce_low"] or 0.0
-                },
-                "calibration": {
-                    "offset": row["offset"] or 0.0,
-                    "scale_factor": row["scale_factor"] or 1.0,
-                    "last_calibrated": row["last_calibrated"]
-                }
-            }
-    
-    def update_sensor_config(self, sensor_id: str, config: Dict) -> bool:
-        """センサー設定を更新"""
-        try:
-            with self._get_connection() as conn:
-                # センサー基本情報の更新
-                if "sensor" in config:
-                    sensor_data = config["sensor"]
-                    conn.execute("""
-                        UPDATE sensors 
-                        SET name = ?, sensor_type = ?, unit = ?, config = ?
-                        WHERE id = ?
-                    """, (
-                        sensor_data.get("name"),
-                        sensor_data.get("sensor_type"),
-                        sensor_data.get("unit"),
-                        json.dumps(sensor_data.get("config", {})),
-                        sensor_id
-                    ))
-                
-                # しきい値設定の更新
-                if "thresholds" in config:
-                    thresholds = config["thresholds"]
-                    conn.execute("""
-                        INSERT OR REPLACE INTO thresholds 
-                        (sensor_id, threshold_high, threshold_low, 
-                         hysteresis_high, hysteresis_low, debounce_high, debounce_low)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        sensor_id,
-                        thresholds.get("high"),
-                        thresholds.get("low"),
-                        thresholds.get("hysteresis_high", 0.0),
-                        thresholds.get("hysteresis_low", 0.0),
-                        thresholds.get("debounce_high", 0.0),
-                        thresholds.get("debounce_low", 0.0)
-                    ))
-                
-                # 較正設定の更新
-                if "calibration" in config:
-                    calibration = config["calibration"]
-                    conn.execute("""
-                        INSERT OR REPLACE INTO calibration 
-                        (sensor_id, offset, scale_factor, last_calibrated, calibration_notes)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (
-                        sensor_id,
-                        calibration.get("offset", 0.0),
-                        calibration.get("scale_factor", 1.0),
-                        calibration.get("last_calibrated"),
-                        calibration.get("notes")
-                    ))
-                
-                return True
-        except Exception as e:
-            print(f"Error updating sensor config: {e}")
-            return False
-    
-    def get_mqtt_config(self) -> Dict:
-        """MQTT設定を取得"""
-        with self._get_connection() as conn:
-            cursor = conn.execute("SELECT * FROM mqtt_config WHERE id = 'mqtt'")
-            row = cursor.fetchone()
-            
-            if row:
-                return {
-                    "host": row["broker_host"],
-                    "port": row["broker_port"],
-                    "username": row["username"],
-                    "password": row["password"],
-                    "client_id": row["client_id"],
-                    "keepalive": row["keepalive"],
-                    "qos": row["qos"],
-                    "retain": bool(row["retain"])
-                }
-            return {
-                "host": "localhost",
-                "port": 1883,
-                "username": None,
-                "password": None,
-                "client_id": None,
-                "keepalive": 60,
-                "qos": 1,
-                "retain": False
-            }
-    
-    def update_mqtt_config(self, config: Dict) -> bool:
-        """MQTT設定を更新"""
-        try:
-            with self._get_connection() as conn:
-                conn.execute("""
-                    INSERT OR REPLACE INTO mqtt_config 
-                    (id, broker_host, broker_port, username, password, 
-                     client_id, keepalive, qos, retain)
-                    VALUES ('mqtt', ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    config.get("host", "localhost"),
-                    config.get("port", 1883),
-                    config.get("username"),
-                    config.get("password"),
-                    config.get("client_id"),
-                    config.get("keepalive", 60),
-                    config.get("qos", 1),
-                    config.get("retain", False)
-                ))
-                return True
-        except Exception as e:
-            print(f"Error updating MQTT config: {e}")
-            return False
-    
-    def get_all_sensors(self) -> List[Dict]:
-        """全センサー一覧を取得"""
-        with self._get_connection() as conn:
-            cursor = conn.execute("""
-                SELECT s.*, t.threshold_high, t.threshold_low, 
-                       c.offset, c.last_calibrated
-                FROM sensors s
-                LEFT JOIN thresholds t ON s.id = t.sensor_id
-                LEFT JOIN calibration c ON s.id = c.sensor_id
-                WHERE s.enabled = TRUE
-                ORDER BY s.name
-            """)
-            
-            sensors = []
-            for row in cursor.fetchall():
-                sensors.append({
-                    "id": row["id"],
-                    "name": row["name"],
-                    "sensor_type": row["sensor_type"],
-                    "unit": row["unit"],
-                    "config": json.loads(row["config"]) if row["config"] else {},
-                    "threshold_high": row["threshold_high"],
-                    "threshold_low": row["threshold_low"],
-                    "offset": row["offset"] or 0.0,
-                    "last_calibrated": row["last_calibrated"],
-                    "created_at": row["created_at"],
-                    "updated_at": row["updated_at"]
-                })
-            
-            return sensors
-    
-    def backup_database(self, backup_path: str) -> bool:
-        """データベースのバックアップ"""
-        try:
-            import shutil
-            shutil.copy2(self.db_path, backup_path)
-            return True
-        except Exception as e:
-            print(f"Error backing up database: {e}")
-            return False
-    
-    def get_database_info(self) -> Dict:
-        """データベース情報を取得"""
-        with self._get_connection() as conn:
-            cursor = conn.execute("SELECT COUNT(*) as sensor_count FROM sensors WHERE enabled = TRUE")
-            sensor_count = cursor.fetchone()["sensor_count"]
-            
-            file_size = self.db_path.stat().st_size if self.db_path.exists() else 0
-            
-            return {
-                "db_path": str(self.db_path),
-                "file_size_bytes": file_size,
-                "file_size_mb": round(file_size / 1024 / 1024, 2),
-                "sensor_count": sensor_count,
-                "created": self.db_path.stat().st_ctime if self.db_path.exists() else None
-            }
-```
+1. **トランザクション管理**
+   - すべての書き込み操作はトランザクション内で実行
+   - エラー時の自動ロールバック
+   - データ整合性の保証
 
-### セットアップスクリプト
+2. **接続管理**
+   - 接続プーリングによる効率的なリソース利用
+   - 同時アクセス制御
+   - タイムアウト処理
 
-```python
-# infrastructure/gateway-setup/sqlite/setup.py
-#!/usr/bin/env python3
-"""
-エッジゲートウェイのSQLiteデータベース初期化スクリプト
-"""
+3. **エラーハンドリング**
+   - 適切な例外処理
+   - リトライメカニズム
+   - ログ記録
 
-import sqlite3
-import json
-import sys
-from pathlib import Path
+### データアクセスパターン
 
-def setup_database(db_path: str, gateway_id: str, gateway_name: str):
-    """SQLiteデータベースを初期化"""
-    
-    db_file = Path(db_path)
-    if db_file.exists():
-        response = input(f"Database {db_path} already exists. Overwrite? (y/N): ")
-        if response.lower() != 'y':
-            print("Setup cancelled.")
-            return False
-        db_file.unlink()
-    
-    # スキーマを読み込み
-    schema_path = Path(__file__).parent / "schema.sql"
-    if not schema_path.exists():
-        print(f"Schema file not found: {schema_path}")
-        return False
-    
-    try:
-        with sqlite3.connect(db_path) as conn:
-            # スキーマ作成
-            with open(schema_path, 'r', encoding='utf-8') as f:
-                conn.executescript(f.read())
-            
-            # 初期データ挿入
-            conn.execute("""
-                INSERT INTO gateway_info (gateway_id, name, location) 
-                VALUES (?, ?, ?)
-            """, (gateway_id, gateway_name, "Default Location"))
-            
-            conn.execute("""
-                INSERT INTO mqtt_config (broker_host, broker_port, client_id) 
-                VALUES (?, ?, ?)
-            """, ("192.168.1.200", 1883, gateway_id))
-            
-            # システム設定のデフォルト値
-            system_defaults = [
-                ('data_collection_interval', '1.0', 'Data collection interval in seconds'),
-                ('heartbeat_interval', '30.0', 'Heartbeat transmission interval in seconds'),
-                ('log_level', 'INFO', 'Logging level'),
-                ('max_retry_attempts', '3', 'Maximum retry attempts for MQTT publishing'),
-                ('connection_timeout', '10.0', 'Network connection timeout in seconds')
-            ]
-            
-            conn.executemany("""
-                INSERT INTO system_config (key, value, description) 
-                VALUES (?, ?, ?)
-            """, system_defaults)
-            
-            print(f"✅ Database initialized successfully: {db_path}")
-            print(f"   Gateway ID: {gateway_id}")
-            print(f"   Gateway Name: {gateway_name}")
-            return True
-            
-    except Exception as e:
-        print(f"❌ Error initializing database: {e}")
-        return False
+**設定の読み込み**
+- キャッシュによる高速化
+- 変更検知による自動リロード
+- デフォルト値の適用
 
-if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print("Usage: python setup.py <db_path> <gateway_id> <gateway_name>")
-        print("Example: python setup.py gateway_config.db rpi4-001 'Factory Line 1'")
-        sys.exit(1)
-    
-    db_path, gateway_id, gateway_name = sys.argv[1:4]
-    success = setup_database(db_path, gateway_id, gateway_name)
-    sys.exit(0 if success else 1)
-```
+**設定の更新**
+- 楽観的ロック
+- 監査ログの記録
+- 変更通知の送信
+
+**バルク操作**
+- バッチ処理による効率化
+- トランザクション単位の制御
+- プログレス監視
+
+### データベース操作の実装方針
+
+**基本設計**
+- スレッドセーフな接続管理
+- コンテキストマネージャーによるリソース管理
+- 例外安全なトランザクション処理
+
+**データアクセスレイヤー**
+1. **センサー設定管理**
+   - 基本設定、しきい値、較正情報の統合管理
+   - JSON形式での柔軟な設定保存
+   - 関連テーブルのJOINによる効率的なデータ取得
+
+2. **MQTT設定管理**
+   - シングルトンパターンでの設定管理
+   - デフォルト値の適切なハンドリング
+   - セキュリティ情報の安全な保存
+
+3. **システム設定管理**
+   - キー・バリュー形式での柔軟な設定
+   - 説明文付きでの設定管理
+   - 変更履歴の追跡
+
+**ユーティリティ機能**
+- データベースのバックアップ機能
+- データベース情報の取得
+- ヘルスチェック機能
 
 ## 運用とメンテナンス
 
 ### バックアップ戦略
 
-```bash
-#!/bin/bash
-# scripts/backup_gateway_db.sh
+**バックアップの設計方針**
+- 単一ファイルのコピーによるシンプルなバックアップ
+- タイムスタンプ付きファイル名での管理
+- 古いバックアップの自動削除（保存期間管理）
+- バックアップディレクトリの自動作成
 
-DB_PATH="/opt/gateway/gateway_config.db"
-BACKUP_DIR="/opt/gateway/backups"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_FILE="$BACKUP_DIR/gateway_config_$TIMESTAMP.db"
-
-# バックアップディレクトリ作成
-mkdir -p "$BACKUP_DIR"
-
-# データベースのコピー
-cp "$DB_PATH" "$BACKUP_FILE"
-
-# 古いバックアップの削除（7日以上前）
-find "$BACKUP_DIR" -name "gateway_config_*.db" -mtime +7 -delete
-
-echo "Database backed up to: $BACKUP_FILE"
-```
+**バックアッププロセス**
+1. バックアップディレクトリの確認・作成
+2. タイムスタンプ付きファイル名の生成
+3. データベースファイルのコピー
+4. 古いバックアップの自動削除
 
 ### ヘルスチェック
 
-```python
-# scripts/health_check.py
-#!/usr/bin/env python3
+**ヘルスチェック項目**
+1. **ファイルの存在確認**
+   - データベースファイルの存在
+   - ファイルサイズの確認
+   - アクセス権限の確認
 
-import sqlite3
-import sys
-from pathlib import Path
+2. **スキーマの整合性**
+   - 必要なテーブルの存在確認
+   - インデックスの確認
+   - トリガーの確認
 
-def check_database_health(db_path: str) -> bool:
-    """データベースの健全性をチェック"""
-    
-    db_file = Path(db_path)
-    if not db_file.exists():
-        print(f"❌ Database file not found: {db_path}")
-        return False
-    
-    try:
-        with sqlite3.connect(db_path) as conn:
-            # テーブル存在確認
-            cursor = conn.execute("""
-                SELECT name FROM sqlite_master 
-                WHERE type='table' AND name IN 
-                ('sensors', 'thresholds', 'calibration', 'mqtt_config')
-            """)
-            tables = [row[0] for row in cursor.fetchall()]
-            
-            required_tables = ['sensors', 'thresholds', 'calibration', 'mqtt_config']
-            missing_tables = set(required_tables) - set(tables)
-            
-            if missing_tables:
-                print(f"❌ Missing tables: {missing_tables}")
-                return False
-            
-            # データ整合性チェック
-            cursor = conn.execute("PRAGMA integrity_check")
-            integrity = cursor.fetchone()[0]
-            
-            if integrity != "ok":
-                print(f"❌ Database integrity check failed: {integrity}")
-                return False
-            
-            # 基本的な動作確認
-            cursor = conn.execute("SELECT COUNT(*) FROM sensors")
-            sensor_count = cursor.fetchone()[0]
-            
-            print(f"✅ Database health check passed")
-            print(f"   File: {db_path}")
-            print(f"   Size: {db_file.stat().st_size / 1024:.1f} KB")
-            print(f"   Sensors: {sensor_count}")
-            
-            return True
-            
-    except Exception as e:
-        print(f"❌ Database health check failed: {e}")
-        return False
+3. **データ整合性**
+   - SQLiteのPRAGMA integrity_check
+   - 外部キー制約の確認
+   - データの論理的整合性
 
-if __name__ == "__main__":
-    db_path = sys.argv[1] if len(sys.argv) > 1 else "gateway_config.db"
-    success = check_database_health(db_path)
-    sys.exit(0 if success else 1)
-```
+4. **基本操作の確認**
+   - 読み取り操作のテスト
+   - レコード数の確認
+   - パフォーマンス指標
 
 ## データベースER図
 

@@ -44,7 +44,7 @@
 | 項目 | 現行システム | 新システム |
 |------|-------------|------------|
 | メインプラットフォーム | Node-RED | Python/FastAPI |
-| エッジDB | MariaDB | SQLite |
+| エッジDB | SQLite | SQLite |
 | UI | Node-RED Dashboard | Streamlit |
 | 設定管理 | GUI中心 | コード中心 |
 | 保守性 | ビジュアル | テキスト・AI支援 |

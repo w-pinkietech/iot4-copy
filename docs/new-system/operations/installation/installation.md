@@ -103,7 +103,7 @@ sudo systemctl status node-red
 |---------|-----|------|
 | Node-REDエディタ | http://localhost:1880 | フロー編集画面 |
 | ダッシュボード | http://localhost:1880/ui | 監視ダッシュボード |
-| MariaDB | localhost:3306 | データベース |
+| SQLite | localhost:3306 | データベース |
 | InfluxDB | http://localhost:8086 | 時系列データベース |
 
 ### 2. センサー接続確認
@@ -164,7 +164,7 @@ ls -la /dev/i2c-* /dev/spidev*
 docker-compose ps
 
 # データベースログ確認
-docker-compose logs mariadb
+docker-compose logs sqlite
 docker-compose logs influxdb
 
 # ネットワーク確認
@@ -176,7 +176,7 @@ docker network ls
 | コンポーネント | ログパス |
 |---------------|----------|
 | Node-RED | ~/.node-red/logs/ |
-| MariaDB | docker logs iotkit_mariadb |
+| SQLite | docker logs iotkit_sqlite |
 | InfluxDB | docker logs iotkit_influxdb |
 | システム | /var/log/syslog |
 
@@ -202,7 +202,7 @@ module.exports = {
 # docker/docker-compose.yml
 version: '3.8'
 services:
-  mariadb:
+  sqlite:
     environment:
       MYSQL_ROOT_PASSWORD: your-password
       MYSQL_DATABASE: iotkit
@@ -244,7 +244,7 @@ sudo certbot certonly --standalone -d yourdomain.com
 tar -czf /backup/node-red-$(date +%Y%m%d).tar.gz ~/.node-red/
 
 # データベースバックアップ
-docker exec iotkit_mariadb mysqldump -u root -p$MYSQL_ROOT_PASSWORD iotkit > /backup/mysql-$(date +%Y%m%d).sql
+docker exec iotkit_sqlite sqlite3 /data/iotkit.db ".backup /backup/sqlite-$(date +%Y%m%d).db"
 
 # InfluxDBバックアップ
 influx backup --org fitc --bucket iotkit /backup/influx-$(date +%Y%m%d)/
