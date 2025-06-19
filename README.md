@@ -18,6 +18,9 @@
 - Raspberry Pi 4 Model B (4GB RAM推奨)
 - Raspbian OS Bullseye以降
 - Docker & Docker Compose
+- Node.js v20.19.1
+- Python 3.11.2
+- npm 10.8.2
 - 32GB以上のmicroSDカード
 
 ### 2. インストール

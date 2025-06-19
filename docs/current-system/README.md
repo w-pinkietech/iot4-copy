@@ -12,7 +12,7 @@
 
 | カテゴリ | 項目 | 仕様 |
 |----------|------|------|
-| **プラットフォーム** | 実行環境 | Node-RED v3.x + Node.js v16.x |
+| **プラットフォーム** | 実行環境 | Node-RED v3.x + Node.js v20.19.1 |
 | | ハードウェア | Raspberry Pi 4B (4GB RAM, ARM64) |
 | | OS基盤 | Raspbian OS (Debian 11ベース) |
 | **センサーハブ** | BLE対応 | BravePI (UART 38400baud) |
@@ -131,15 +131,15 @@ graph TB
 
 | 機能タブ | ノード数 | 割合 | 主要責務 | 技術的複雑度 |
 |----------|----------|------|----------|-------------|
-| **PI・JIG・I2C・GPIO** | 380 | 37.4% | ハードウェア制御・信号処理 | ★★★ |
-| **設定** | 125 | 12.3% | 動的設定管理・パラメータ制御 | ★★☆ |
-| **ルーター** | 95 | 9.3% | HTTP API・データルーティング | ★★☆ |
-| **BLEトランスミッター** | 81 | 8.0% | BLE通信・電力管理 | ★★★ |
-| **その他** | 80 | 7.9% | 共通ユーティリティ・補助機能 | ★☆☆ |
-| **ダッシュボード** | 76 | 7.5% | リアルタイム可視化・UI制御 | ★★☆ |
+| **PI・JIG・I2C・GPIO** | 380 | 37.4% | ハードウェアインターフェース制御・信号処理 | ★★★ |
+| **設定** | 125 | 12.3% | システム設定・動的パラメータ管理 | ★★☆ |
+| **ルーター** | 95 | 9.3% | ネットワークルーティング・API管理 | ★★☆ |
+| **BLEトランスミッター** | 81 | 8.0% | Bluetooth Low Energy通信・電力管理 | ★★★ |
+| **その他** | 80 | 7.9% | ユーティリティ機能・共通処理 | ★☆☆ |
+| **ダッシュボード** | 76 | 7.5% | リアルタイム可視化ダッシュボード・UI制御 | ★★☆ |
 | **デバイス登録** | 70 | 6.9% | デバイスライフサイクル管理 | ★★☆ |
-| **モジュール** | 58 | 5.7% | 再利用可能コンポーネント | ★★☆ |
-| **センサーログ** | 52 | 5.1% | データ永続化・ログ管理 | ★★☆ |
+| **モジュール** | 58 | 5.7% | 拡張モジュール・再利用可能コンポーネント | ★★☆ |
+| **センサーログ** | 52 | 5.1% | 時系列データ管理・ログ永続化 | ★★☆ |
 
 **注**: ★印は実装・保守の技術的複雑度を示す（★☆☆：低、★★☆：中、★★★：高）
 
@@ -220,23 +220,25 @@ Keep-Alive: 60秒
 
 **RESTful HTTP API**
 ```yaml
-Base URL: http://localhost:1880
+Base URL: http://localhost:1880/api/v2
 Content-Type: application/json
 認証: なし（ローカル専用）
 
 エンドポイント:
   デバイス管理:
-    GET    /api/v2/device           # 一覧取得
-    POST   /api/v2/device           # 新規登録
-    DELETE /api/v2/device/:id       # 削除
+    GET    /device              # 全デバイスの取得
+    GET    /device/:deviceId    # 特定デバイスの取得
+    POST   /device              # 新規デバイスの登録
+    DELETE /device/:deviceId    # デバイスの削除
   
-  センサー制御:
-    GET    /api/v2/device/:id/sensor/value  # 値取得
-    POST   /api/v2/device/:id/output        # 出力制御
+  センサーデータ:
+    GET    /device/:deviceId/sensor/value  # センサー値の取得
+    POST   /device/:deviceId/sensor/value  # センサーデータの送信
+    POST   /device/:deviceId/output        # 出力制御
   
   システム管理:
-    GET    /api/v2/system/status    # システム状態
-    GET    /api/v2/sensor/type      # センサータイプ一覧
+    GET    /system/status       # システム状態
+    GET    /sensor/type         # センサータイプ一覧
 ```
 
 ## 📊 データ基盤アーキテクチャ
@@ -246,6 +248,13 @@ Content-Type: application/json
 ### MariaDB（リレーショナル設定管理）
 
 **設計思想**: ACID特性を活用した整合性重視の設定データ管理
+
+**接続情報**:
+- ホスト: 127.0.0.1
+- ポート: 3306
+- データベース: iotkit
+- ユーザー: iotkit
+- パスワード: iotkit-password
 
 ```sql
 主要テーブル群:
@@ -270,6 +279,13 @@ Content-Type: application/json
 
 **設計思想**: 書き込み最適化・圧縮効率重視の測定データ管理
 
+**接続情報**:
+- ホスト: 127.0.0.1
+- ポート: 8086
+- 組織: fitc
+- バケット: iotkit
+- トークン: influxdb-iotkit-secret-token
+
 ```yaml
 データ構造:
   Organization: fitc                    # 組織単位
@@ -289,7 +305,7 @@ Content-Type: application/json
 
 性能特性:
   書き込み性能: >10,000 points/sec
-  保持期間: 1年間（自動削除）
+  保持期間: 90日間（自動削除）
   圧縮率: 平均90%（SNAPPY算法）
   集計クエリ: リアルタイム（<100ms）
 ```
@@ -405,9 +421,10 @@ function extractSensorPayload(payload) {
   Container: Docker 20.10+ / Docker Compose 2.0+
   
 ランタイム環境:
-  Node.js: v16.19+ (LTS)
+  Node.js: v20.19.1
+  npm: v10.8.2
   Node-RED: v3.0+
-  Python: v3.9+ (センサードライバー用)
+  Python: v3.11.2 (センサードライバー用)
 ```
 
 ### 主要パッケージ構成
@@ -485,9 +502,45 @@ Docker化サービス:
 3. [REST API仕様](api/rest-api.md) - 外部連携方法を確認
 
 ### システムを運用したい方
-1. **インストール手順** *(作成予定)* - システムの新規構築
-2. **トラブルシューティング** *(作成予定)* - 問題解決ガイド
-3. **メンテナンス手順** *(作成予定)* - 定期保守作業
+
+#### 基本的な運用コマンド
+```bash
+# システムの起動
+cd docker && docker-compose up -d
+
+# システムの停止
+cd docker && docker-compose down
+
+# サービス状態確認
+docker-compose ps
+
+# ログの確認
+docker-compose logs -f mariadb
+docker-compose logs -f influxdb
+
+# Node-REDログの監視
+sudo journalctl -u node-red -f
+```
+
+#### デバッグ・診断コマンド
+```bash
+# I2Cデバイスの確認
+sudo i2cdetect -y 1
+
+# MQTTメッセージの監視
+mosquitto_sub -h localhost -p 1883 -u iotkit -P iotkit-password -t "#" -v
+
+# シリアルポートの確認
+ls -l /dev/tty{AMA0,ACM*}
+
+# Node-REDをセーフモードで起動（開発時）
+node-red --safe --userDir ./.node-red
+```
+
+#### システムアクセス
+- **Node-REDエディター**: http://localhost:1880
+- **ダッシュボード**: http://localhost:1880/ui
+- **REST API**: http://localhost:1880/api/v2
 
 ### システムを拡張したい方
 1. [技術詳細分析](analysis/technical-analysis.md) - 内部実装の理解
@@ -499,7 +552,7 @@ Docker化サービス:
 ## 📋 文書メタデータ
 
 **文書タイトル**: IoT導入支援キット Ver.4.1 - 現行システム技術文書  
-**最終更新**: 2025年6月16日  
+**最終更新**: 2025年6月19日  
 **システムバージョン**: Ver.4.1.0-Raspi4  
 **対象システム**: 福岡県工業技術センター提供システム  
 **文書管理**: システム解析チーム  
