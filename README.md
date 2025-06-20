@@ -48,35 +48,30 @@ cd docker && docker-compose up -d
 ### 🎯 目的別ガイド
 
 #### 初めての方
-1. [📖 システム概要](./docs/architecture/overview.md) - 全体像の理解
-2. [⚙️ インストールガイド](./docs/guides/installation.md) - 環境構築
-3. [🚀 開発ガイド](./docs/guides/development.md) - 開発環境準備
-
-#### システム移行検討者
-1. [🔄 移行戦略概要](./docs/migration/overview.md) - 移行計画
-2. [📊 事前分析手順](./docs/migration/analysis-procedures.md) - 現状分析
-3. [🏗️ アーキテクチャ選択肢](./docs/migration/architecture-alternatives.md) - 技術選定
+1. [📖 システム概要](./docs/current-system/) - Node-REDベースの現在のシステム
+2. [🏗️ BravePI/JIG統合アーキテクチャ](./docs/current-system/architecture/bravepi-bravejig-integration.md) - システム全体設計
+3. [📊 技術分析](./docs/current-system/analysis/technical-analysis.md) - 性能分析、課題分析
 
 #### 運用管理者
-1. [⚡ 日常運用ガイド](./docs/guides/operation.md) - 運用手順
-2. [🔧 トラブルシューティング](./docs/guides/troubleshooting.md) - 問題解決
-3. [📡 API仕様](./docs/api/rest-api.md) - 外部連携
+1. [⚡ 運用手順](./docs/current-system/operations/) - 日常運用・保守
+2. [🔧 トラブルシューティング](./docs/current-system/analysis/) - 問題解決
+3. [📡 API仕様](./docs/current-system/api/) - 外部連携
 
 #### 開発者
-1. [⚙️ Node-REDフロー仕様](./docs/technical/node-red-flows.md) - 実装詳細
-2. [🧪 テストガイド](./docs/guides/testing.md) - 品質保証
-3. [🔌 API リファレンス](./docs/api/rest-api.md) - プログラム連携
+1. [⚙️ Node-REDフロー仕様](./docs/current-system/architecture/) - 実装詳細
+2. [🔌 センサー仕様](./docs/current-system/reference/) - ハードウェア連携
+3. [📈 データ分析](./docs/current-system/analysis/) - システム分析
 
 ### 📁 ドキュメント構成
 
 ```
 docs/
-├── 📁 architecture/     # システム設計・アーキテクチャ
-├── 📁 technical/        # 技術仕様・実装詳細
-├── 📁 migration/        # システム移行ガイド
-├── 📁 guides/          # 運用・開発ガイド
-├── 📁 api/             # API仕様・外部連携
-└── 📁 assets/          # 図表・リソース
+└── 🔧 current-system/   # Node-REDベースの現行システム
+    ├── architecture/    # システム全体設計、BravePI/JIG統合詳細
+    ├── analysis/       # 性能分析、課題分析
+    ├── api/           # 既存エンドポイント仕様
+    ├── operations/    # 運用・保守手順
+    └── reference/     # ハードウェア/ソフトウェア仕様
 ```
 
 ## システム構成
