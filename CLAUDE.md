@@ -56,3 +56,30 @@ sudo journalctl -u node-red -f
 2. コミットメッセージ規約: feat, fix, docs, style, refactor, test, chore
 3. 現在Python/FastAPIへの移行計画が進行中
 4. 詳細なドキュメントは `docs/README.md` を参照
+
+## ドキュメント作業時の必須ルール
+
+**重要**: ドキュメントを作成・編集する際は、必ず以下のルールに従ってください：
+
+📋 **[ドキュメント管理ルール](docs/document-management-rules.md)** を参照・遵守
+
+### 主要ルール概要
+- **検証ステータス管理**: ✅⚠️🔍❌ での状況明示
+- **時間ベース排他制御**: 30分ルールでの作業管理
+- **Issue連携**: GitHub Issueとの関連付け必須
+- **Claude会話ID記録**: 作業支援の継続性確保
+- **メタデータ更新**: ファイルフッターでの進捗管理
+
+### 作業開始前チェック
+```bash
+# 1. ファイルの作業可能性確認
+grep "最終活動" target-file.md
+
+# 2. 関連Issueの確認  
+grep "関連Issue" target-file.md
+
+# 3. Claude会話IDの確認
+grep "会話ID" target-file.md
+```
+
+**詳細**: [docs/document-management-rules.md](docs/document-management-rules.md) で全ルールを確認してください。

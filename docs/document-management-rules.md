@@ -223,7 +223,7 @@ graph TB
 
 ### Issue IDとファイルメタデータの関連付け
 
-#### 拡張版フッターフォーマット（Issue連携対応）
+#### 拡張版フッターフォーマット（Issue・Claude連携対応）
 ```markdown
 ---
 
@@ -241,81 +241,165 @@ graph TB
 - **作業開始**: 2025年6月19日 15:30 JST
 - **想定完了**: 2025年6月19日 17:30 JST
 
+### 🤖 Claude Code連携情報
+- **作成会話ID**: `claude-conversation-abc123def456`
+- **検証会話ID**: `claude-conversation-xyz789ghi012`
+- **最終相談**: 2025年6月19日 15:45 JST
+- **Claude担当者**: Claude (Sonnet 4)
+- **召喚コマンド**: `@Claude conversation:xyz789ghi012 continue verification`
+
 ### 検証TODO (Issue #123)
-- [ ] ポート番号確認 (実機) - 想定30分
-- [x] 基本コマンド確認 (user, 6/15) 
-- [ ] 性能値測定 - 想定60分
+- [ ] ポート番号確認 (実機) - 想定30分 → Claude相談済み
+- [x] 基本コマンド確認 (user, 6/15) → 会話ID: abc123def456
+- [ ] 性能値測定 - 想定60分 → Claude支援予定
 
 ### 検証済みにする方法
 - [ ] 実際のRaspberry Piでポート確認 → Issue #123 タスク1
 - [ ] docker-compose.ymlとの設定値照合 → Issue #123 タスク2
 - [ ] 負荷テストによる性能測定 → Issue #123 タスク3
 
-**重要度**: 🔴 High | **Issue状態**: 🔄 In Progress
+**重要度**: 🔴 High | **Issue状態**: 🔄 In Progress | **Claude支援**: 🤖 Available
 ```
 
-### Issue連携ワークフロー
+### Issue・Claude連携ワークフロー
 ```mermaid
 graph TB
     A[📝 検証必要ファイル発見] --> B[📋 Issue作成]
     
-    B --> C[Issue #123: technical-specs.md検証]
-    C --> D[🌿 ブランチ作成: feature/verify-technical-specs-issue-123]
+    B --> C[🤖 Claude Code新規会話開始]
+    C --> D[Issue #123: technical-specs.md検証]
+    D --> E[🌿 ブランチ作成: feature/verify-technical-specs-issue-123]
     
-    D --> E[📄 ファイルメタデータ更新]
-    E --> F[🔗 Issue #123 情報を記載]
+    E --> F[📄 ファイルメタデータ更新]
+    F --> G[🔗 Issue #123 + 会話ID記載]
     
-    F --> G[🔄 作業実施]
-    G --> H[📝 進捗コミット: refs #123]
+    G --> H[🔄 作業実施]
+    H --> I{Claude支援必要?}
     
-    H --> I{作業完了?}
-    I -->|No| J[📊 Progress Update]
-    I -->|Yes| K[✅ 検証完了マーク]
+    I -->|Yes| J[🤖 既存会話ID継続]
+    I -->|No| K[📝 進捗コミット: refs #123]
     
-    J --> G
-    K --> L[📤 PR作成: closes #123]
-    L --> M[🔍 レビュー・マージ]
-    M --> N[🎯 Issue自動クローズ]
+    J --> L[会話ID更新]
+    L --> K
+    
+    K --> M{作業完了?}
+    M -->|No| N[📊 Progress Update]
+    M -->|Yes| O[✅ 検証完了マーク]
+    
+    N --> H
+    O --> P[📝 最終会話ID記録]
+    P --> Q[📤 PR作成: closes #123]
+    Q --> R[🔍 レビュー・マージ]
+    R --> S[🎯 Issue自動クローズ]
 ```
 
-### Git コミットメッセージ連携
+### Git コミットメッセージ連携（Claude対応）
 ```bash
-# Issue開始時
+# Issue・Claude開始時
 git commit -m "docs: start verification of technical-specs.md
 
 - 関連Issue: #123
 - 検証項目: ポート番号、基本コマンド、性能値
 - 想定作業時間: 2時間
+- Claude会話ID: xyz789ghi012
 
 refs #123"
 
-# 進捗更新時
+# Claude支援付き進捗更新時
 git commit -m "docs: verify port numbers in technical-specs.md - ✅ confirmed
 
 - ポート1880, 3306, 8086を実機確認
 - docker-compose.ymlとの整合性確認済み
+- Claude支援: conversation:xyz789ghi012
 
 refs #123"
 
-# 完了時
+# 完了時（Claude記録）
 git commit -m "docs: complete verification of technical-specs.md
 
 - 全セクションの実機検証完了
 - ステータス: 🔍 → ✅ 
 - 検証者: user
+- 最終Claude会話: xyz789ghi012
 
 closes #123"
 ```
 
-## 📊 進捗管理・監視
+## 🤖 Claude Code担当者召喚システム
 
-### Issue Dashboard
+### Claude担当者召喚機能
 ```bash
 #!/bin/bash
-# issue-dashboard.sh - Issue連携状況確認
+# claude-summon.sh - Claude担当者召喚スクリプト
 
-echo "📊 ドキュメント検証 Issue Dashboard"
-echo "=================================="
+summon_claude_for_file() {
+    local file="$1"
+    
+    echo "🤖 Claude担当者情報 for $file"
+    echo "============================================"
+    
+    # 会話ID抽出
+    local creation_id=$(grep "作成会話ID" "$file" | grep -o "claude-conversation-[a-zA-Z0-9]*")
+    local verification_id=$(grep "検証会話ID" "$file" | grep -o "claude-conversation-[a-zA-Z0-9]*")
+    local last_consultation=$(grep "最終相談" "$file" | cut -d: -f2-)
+    
+    echo "📝 作成時会話: $creation_id"
+    echo "🔍 検証時会話: $verification_id"
+    echo "🕒 最終相談: $last_consultation"
+    echo ""
+    
+    echo "💬 召喚コマンド例:"
+    echo "  @Claude conversation:$verification_id 続きから検証作業を支援して"
+    echo "  @Claude conversation:$creation_id この文書の作成背景を教えて"
+    echo ""
+    
+    echo "🔗 会話復元リンク:"
+    if [ -n "$verification_id" ]; then
+        echo "  検証会話: https://claude.ai/chat/${verification_id#claude-conversation-}"
+    fi
+    if [ -n "$creation_id" ]; then
+        echo "  作成会話: https://claude.ai/chat/${creation_id#claude-conversation-}"
+    fi
+    echo ""
+    
+    echo "🎯 Claude支援活用例:"
+    echo "  - 検証で困った時の技術相談"
+    echo "  - 作成時の設計思想確認"
+    echo "  - 他担当者への引き継ぎ支援"
+}
+
+# 使用例
+# summon_claude_for_file "docs/current-system/specifications/technical-specs.md"
+```
+
+### Claude活用戦略
+```yaml
+会話ID管理:
+  作成会話ID: ドキュメント最初作成時の会話
+  検証会話ID: 検証・修正作業時の会話
+  相談会話ID: 技術的な相談・議論時の会話
+
+召喚タイミング:
+  検証困難時: 技術的な判断で迷った時
+  引き継ぎ時: 新しい担当者への知識移転
+  改善時: より良い表現・構造への改善
+  統合時: 複数文書の整合性確認
+
+活用例:
+  "@Claude conversation:xyz789 ポート番号が実機と設定で違います。どちらを正とすべき？"
+  "@Claude conversation:abc123 この文書の作成方針に沿って新情報を統合するには？"
+  "@Claude conversation:def456 新担当者向けに検証状況をまとめてください"
+```
+
+## 📊 進捗管理・監視（Claude連携対応）
+
+### 統合Dashboard
+```bash
+#!/bin/bash
+# integrated-dashboard.sh - Issue・Claude連携状況確認
+
+echo "📊 ドキュメント検証 統合Dashboard"
+echo "===================================="
 
 # 進行中のIssue確認
 echo "🔄 進行中の検証作業:"
@@ -325,22 +409,27 @@ gh issue list --label verification --state open \
 
 echo ""
 
-# Issue連携されたファイル一覧
-echo "🔗 Issue連携済みファイル:"
+# Issue・Claude連携状況
+echo "🔗 Issue・Claude連携状況:"
 find docs/ -name "*.md" -exec grep -l "関連Issue.*#[0-9]" {} \; | while read file; do
     issue=$(grep "関連Issue" "$file" | grep -o "#[0-9]*")
     status=$(grep "検証ステータス" "$file" | grep -o "[✅⚠️🔍❌]")
-    echo "$file: $issue $status"
+    claude_id=$(grep "検証会話ID" "$file" | grep -o "claude-conversation-[a-zA-Z0-9]*" | head -1)
+    
+    if [ -n "$claude_id" ]; then
+        echo "$file: $issue $status 🤖 $claude_id"
+    else
+        echo "$file: $issue $status ❓ Claude未連携"
+    fi
 done
 
 echo ""
 
-# 未Issue化ファイル
-echo "❓ Issue未作成の重要ファイル:"
-find docs/ -name "*.md" -exec grep -l "重要度.*🔴" {} \; | while read file; do
-    if ! grep -q "関連Issue.*#[0-9]" "$file"; then
-        echo "$file (🔴 High - Issue作成推奨)"
-    fi
+# Claude支援可能ファイル
+echo "🤖 Claude支援可能ファイル:"
+find docs/ -name "*.md" -exec grep -l "Claude支援.*Available" {} \; | while read file; do
+    verification_id=$(grep "検証会話ID" "$file" | grep -o "claude-conversation-[a-zA-Z0-9]*")
+    echo "$file → 召喚: @Claude conversation:$verification_id"
 done
 ```
 
@@ -506,13 +595,31 @@ check_file_availability() {
 **📋 ドキュメントステータス**
 
 **🔍 検証ステータス**: ⚠️ 要確認  
-**📅 最終更新**: 2025年6月19日 16:00 JST  
+**📅 最終更新**: 2025年6月19日 16:30 JST  
 **👤 作業中**: Claude + user  
-**🕒 最終活動**: 2025年6月19日 16:00 JST  
+**🕒 最終活動**: 2025年6月19日 16:30 JST  
+
+### 🔗 Git・Issue連携情報
+- **関連Issue**: 未作成（管理ルール策定中）
+- **作業ブランチ**: `dev`
+- **担当者**: @user + Claude
+
+### 🤖 Claude Code連携情報
+- **作成会話ID**: `この会話のID` (※実際は現在の会話ID)
+- **検証会話ID**: `今後の検証時に更新`
+- **最終相談**: 2025年6月19日 16:30 JST
+- **Claude担当者**: Claude (Sonnet 4)
+- **召喚コマンド**: `@Claude conversation:[current-id] continue management rules`
 
 ### 検証TODO
 - [ ] 実際のプロジェクトでの運用テスト
-- [ ] スクリプト例の動作確認
+- [ ] スクリプト例の動作確認  
 - [ ] 時間判定ロジックの実装確認
+- [ ] Claude会話ID取得・記録方法の確立
 
-**重要度**: 🔴 High（全作業者必読）
+### 検証済みにする方法
+- [ ] 実際のファイルでメタデータフォーマット適用テスト
+- [ ] Issue・Claude連携フローの実践
+- [ ] 召喚スクリプトの動作確認
+
+**重要度**: 🔴 High（全作業者必読） | **Claude支援**: 🤖 Available
